@@ -7,7 +7,7 @@ toolchain go1.26.6
 require (
 	github.com/Akegarasu/blivedm-go v1.6.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/prometheus/client_golang v1.23.2
 )
