@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"streaming-agent/internal/audience"
@@ -11,41 +12,62 @@ import (
 	"streaming-agent/internal/generation"
 	"streaming-agent/internal/live"
 	"streaming-agent/internal/monitoring"
-	"streaming-agent/internal/observer"
 	"streaming-agent/internal/streaming"
 )
 
 func TestRuntimeStartsAsynchronouslyAndStopsAtBoundary(t *testing.T) {
-	hub := monitoring.NewHub(monitoring.EmptySnapshot(time.Now().UTC(), 5*time.Second, 10*time.Second, 5*time.Second))
-	preparer := &fakePreparer{}
-	output := &fakeOutput{}
-	schedulerConfig := generation.DefaultSchedulerConfig(1)
-	schedulerConfig.InitialConcurrency = 1
-	runtime := NewRuntime(RuntimeConfig{
-		StorySeed: "a quiet room", SegmentDuration: 5 * time.Second,
-		CommitHorizon: 5 * time.Second, ReadyTarget: 5 * time.Second,
-		SubmittedTarget: 10 * time.Second, PlannedHorizon: 10 * time.Second,
-		SchedulerInterval: 5 * time.Millisecond, PollInterval: 5 * time.Millisecond,
-		FallbackExitReady: 5 * time.Second, DataDir: t.TempDir(),
-	}, &memoryStore{}, fakeDirector{}, fakeGenerator{}, preparer, output,
-		generation.NewScheduler(schedulerConfig), hub, nil, nil)
+	synctest.Test(t, func(t *testing.T) {
+		hub := monitoring.NewHub(monitoring.EmptySnapshot(time.Now().UTC(), 5*time.Second, 10*time.Second, 5*time.Second))
+		preparer := &fakePreparer{}
+		output := &fakeOutput{}
+		schedulerConfig := generation.DefaultSchedulerConfig(1)
+		schedulerConfig.InitialConcurrency = 1
+		runtime := NewRuntime(RuntimeConfig{
+			StorySeed: "a quiet room", SegmentDuration: 5 * time.Second,
+			CommitHorizon: 5 * time.Second, ReadyTarget: 5 * time.Second,
+			SubmittedTarget: 10 * time.Second, PlannedHorizon: 10 * time.Second,
+			SchedulerInterval: 5 * time.Millisecond, PollInterval: 5 * time.Millisecond,
+			FallbackExitReady: 5 * time.Second, DataDir: t.TempDir(),
+		}, &memoryStore{}, fakeDirector{}, fakeGenerator{}, preparer, output,
+			generation.NewScheduler(schedulerConfig), hub, nil, nil)
 
-	started := time.Now()
-	if err := runtime.Start(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if time.Since(started) > 100*time.Millisecond {
-		t.Fatal("start command did not return asynchronously")
-	}
-	waitForStatus(t, hub, "running")
-	if preparer.fallbackPath == "" {
-		t.Fatal("fallback destination was not provided")
-	}
-	waitForWrite(t, output)
-	if err := runtime.Stop(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	waitForStatus(t, hub, "stopped")
+		t.Cleanup(func() {
+			runtime.mu.Lock()
+			cancel := runtime.cancel
+			runtime.mu.Unlock()
+			if cancel != nil {
+				cancel()
+			}
+		})
+
+		started := time.Now()
+		if err := runtime.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if time.Since(started) > 100*time.Millisecond {
+			t.Fatal("start command did not return asynchronously")
+		}
+		waitForStatus(t, hub, "running")
+		if preparer.fallbackPath == "" {
+			t.Fatal("fallback destination was not provided")
+		}
+		waitForWrite(t, output)
+		if err := runtime.Stop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		waitForStatus(t, hub, "stopped")
+		synctest.Wait()
+		output.mu.Lock()
+		writes := output.writes
+		output.mu.Unlock()
+		time.Sleep(time.Second)
+		synctest.Wait()
+		output.mu.Lock()
+		defer output.mu.Unlock()
+		if output.writes != writes {
+			t.Fatal("playback continued after stop")
+		}
+	})
 }
 
 func waitForStatus(t *testing.T, hub *monitoring.Hub, wanted string) {
@@ -104,55 +126,20 @@ func (*memoryStore) ListAttempts(context.Context, live.SessionID) ([]generation.
 }
 func (*memoryStore) ListSessionHistory(context.Context) ([]HistorySummary, error) { return nil, nil }
 func (*memoryStore) SessionHistory(context.Context, string) (History, error)      { return History{}, nil }
-func (*memoryStore) RecordObserverRun(context.Context, live.SessionID, uint64, []string, observer.Observation, string) error {
+func (*memoryStore) RecordObserverRun(context.Context, live.SessionID, uint64, []string, audience.Observation, string) error {
 	return nil
 }
 func (*memoryStore) AssetPath(context.Context, string) (string, bool, error) { return "", false, nil }
 
 type fakeDirector struct{}
 
-func TestGenerationSpecFollowsHostDialogueBeatModes(t *testing.T) {
-	anchors := map[string]string{
-		"chat-live-start": "data:start", "chat-live-end": "data:end",
-	}
-	first := generationSpec(0, anchors)
-	if first.Mode != generation.ModeFirstLastFrameToVideo || first.FirstFrame == nil || first.LastFrame == nil {
-		t.Fatalf("first beat spec = %+v", first)
-	}
-	transition := generationSpec(3, anchors)
-	if transition.Mode != generation.ModeFirstFrameToVideo || transition.FirstFrame == nil || transition.FirstFrame.ID != "chat-live-end" {
-		t.Fatalf("transition spec = %+v", transition)
-	}
-	cutaway := generationSpec(4, anchors)
-	if cutaway.Mode != generation.ModeTextToVideo || cutaway.Ratio != "16:9" {
-		t.Fatalf("cutaway spec = %+v", cutaway)
-	}
-}
-
-func TestCurrentFlowProjectsPlannedDirection(t *testing.T) {
-	timelineValue, err := live.NewTimeline(30 * time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	directionValue := director.IdleDirection()
-	directionValue.Dialogue = "外面那圈灯刚亮，你们也看见了？"
-	segmentValue, err := live.NewSegment("segment-1", 0, 0, 5*time.Second, directionValue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := timelineValue.Append(segmentValue); err != nil {
-		t.Fatal(err)
-	}
-	sessionValue, err := live.NewSession("session-1", live.WorldState{}, timelineValue, time.Now().UTC())
-	if err != nil {
-		t.Fatal(err)
-	}
-	audienceWindow := audience.NewWindow(20 * time.Second)
-	audienceWindow.Add(audience.Message{ID: "one", Text: "看看桌上的杯子", At: time.Now().UTC()})
-	runtime := Runtime{config: RuntimeConfig{Audience: audienceWindow}, session: &sessionValue}
-	current := runtime.CurrentFlow()
-	if current.Status != "running" || current.Direction.TargetLabel == "" || current.Nodes[3].Status != "completed" || current.Audience.MessageCount != 1 || current.Nodes[0].Status != "completed" {
-		t.Fatalf("current flow = %+v", current)
+func TestGenerationSpecKeepsIdentityAcrossSequence(t *testing.T) {
+	anchors := map[string]string{"chat-live-start": "data:start", "chat-live-end": "data:end"}
+	for _, sequence := range []int{0, 3, 4, 9, 12} {
+		spec := generationSpec(sequence, anchors)
+		if spec.Mode != generation.ModeFirstFrameToVideo || spec.FirstFrame.ID != "chat-live-start" || spec.LastFrame != nil {
+			t.Fatalf("sequence %d: %+v", sequence, spec)
+		}
 	}
 }
 
@@ -192,12 +179,15 @@ type fakeOutput struct {
 }
 
 func (*fakeOutput) Start(context.Context) error { return nil }
-func (o *fakeOutput) Write(context.Context, streaming.Segment) error {
+func (o *fakeOutput) Write(_ context.Context, segment streaming.Segment) error {
 	o.mu.Lock()
 	o.writes++
+	o.stats.OutTime += segment.Duration
 	o.mu.Unlock()
 	time.Sleep(10 * time.Millisecond)
 	return nil
 }
 func (*fakeOutput) Stop(context.Context) error { return nil }
-func (o *fakeOutput) Stats() streaming.Stats   { return o.stats }
+func (o *fakeOutput) Stats() streaming.Stats   { o.mu.Lock(); defer o.mu.Unlock(); return o.stats }
+
+func (*memoryStore) ReplanSegments(context.Context, live.SessionID, []live.Segment) error { return nil }

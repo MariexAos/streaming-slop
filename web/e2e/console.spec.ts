@@ -185,3 +185,72 @@ test("background room refresh preserves an edited draft", async ({ page }) => {
   await page.waitForResponse("**/config/bilibili")
   await expect(room).toHaveValue("789")
 })
+
+test("switches persisted character versions and binds unknown submissions", async ({ page }) => {
+  const first = {
+    id: "version-1",
+    characterId: "host",
+    name: "主播",
+    description: "white cardigan",
+    firstFrame: { id: "a", width: 1280, height: 720 },
+    lastFrame: { id: "b", width: 1280, height: 720 },
+    scene: { location: "room", time: "day", lighting: "natural" },
+    camera: { shot: "medium", angle: "fixed" },
+  }
+  const second = { ...first, id: "version-2" }
+  let current = first
+  let bound = false
+  await page.route("**/api/v1/characters", (route) => route.fulfill({ json: [first, second] }))
+  await page.route("**/api/v1/characters/current", async (route) => {
+    if (route.request().method() === "PUT") {
+      expect(route.request().postDataJSON()).toEqual({ versionId: "version-2" })
+      current = second
+      await route.fulfill({ status: 204 })
+    } else await route.fulfill({ json: current })
+  })
+  await page.route("**/api/v1/budget", (route) =>
+    route.fulfill({
+      json: { limitMicros: 10000000, chargedMicros: 2500000, reservedMicros: 2500000 },
+    }),
+  )
+  await page.route("**/api/v1/attempts/unresolved", (route) =>
+    route.fulfill({
+      json: bound
+        ? []
+        : [{ id: "attempt-1", provider: "minimax", jobId: "", status: "PENDING_SUBMIT" }],
+    }),
+  )
+  await page.route("**/api/v1/attempts/attempt-1/job", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ jobId: "provider-job" })
+    bound = true
+    await route.fulfill({ status: 204 })
+  })
+  await page.goto("/")
+  await page.getByRole("button", { name: "配置", exact: true }).click()
+  await page.getByLabel("人物版本").selectOption("version-2")
+  await expect(page.getByLabel("人物版本")).toHaveValue("version-2")
+  await expect(page.getByText(/在途预占 ¥2.5000/)).toBeVisible()
+  await page.getByLabel("任务编号 attempt-1").fill("provider-job")
+  await page.getByRole("button", { name: "绑定任务", exact: true }).click()
+  await expect(page.getByLabel("任务编号 attempt-1")).toHaveCount(0)
+})
+
+test("keeps preparation and keyboard navigation usable on a narrow screen in dark OS mode", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.goto("/")
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(255, 255, 255)")
+  await expect(page.getByRole("region", { name: "开播准备" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "直播安全余量" })).not.toBeVisible()
+  await page.getByText("运行详情 · 缓冲、时间轴与推流状态", { exact: true }).press("Enter")
+  await expect(page.getByRole("heading", { name: "直播安全余量" })).toBeVisible()
+  await page.getByRole("button", { name: "检查开播配置" }).click()
+  await expect(page.getByRole("heading", { name: "为下一场直播做好准备" })).toBeVisible()
+  await page.getByRole("button", { name: "运行", exact: true }).click()
+  await expect(page.getByRole("region", { name: "开播准备" })).toBeVisible()
+  expect(await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  )
+})

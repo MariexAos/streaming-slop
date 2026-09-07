@@ -23,13 +23,14 @@ type AssetRef struct {
 }
 
 type GenerationSpec struct {
-	Mode       GenerationMode `json:"mode"`
-	Prompt     string         `json:"prompt"`
-	FirstFrame *AssetRef      `json:"firstFrame,omitempty"`
-	LastFrame  *AssetRef      `json:"lastFrame,omitempty"`
-	Resolution string         `json:"resolution"`
-	Duration   time.Duration  `json:"duration"`
-	Ratio      string         `json:"ratio"`
+	AnchorVersion string         `json:"anchorVersion,omitempty"`
+	Mode          GenerationMode `json:"mode"`
+	Prompt        string         `json:"prompt"`
+	FirstFrame    *AssetRef      `json:"firstFrame,omitempty"`
+	LastFrame     *AssetRef      `json:"lastFrame,omitempty"`
+	Resolution    string         `json:"resolution"`
+	Duration      time.Duration  `json:"duration"`
+	Ratio         string         `json:"ratio"`
 }
 
 func (s GenerationSpec) Validate() error {
@@ -39,8 +40,8 @@ func (s GenerationSpec) Validate() error {
 	if s.Resolution != "768P" {
 		return errors.New("online generation resolution must be 768P")
 	}
-	if s.Duration != 5*time.Second {
-		return errors.New("online generation duration must be 5 seconds")
+	if s.Duration < 5*time.Second || s.Duration > 15*time.Second || s.Duration%time.Second != 0 {
+		return errors.New("generation duration must be an integer between 5 and 15 seconds")
 	}
 	validRef := func(ref *AssetRef) bool {
 		return ref != nil && strings.TrimSpace(ref.URL) != ""
@@ -75,14 +76,20 @@ const (
 )
 
 type Request struct {
-	AttemptID      live.AttemptID
-	SegmentID      live.SegmentID
-	IdempotencyKey string
-	Duration       time.Duration
-	Direction      live.Direction
-	World          live.WorldState
-	Spec           GenerationSpec
-	References     []string
+	CharacterVersion string
+	ReferenceFrame   *AssetRef
+	ParentSegmentID  live.SegmentID
+	ParentAssetID    live.AssetID
+	Model            string
+	UnitPriceCNY     *float64
+	AttemptID        live.AttemptID
+	SegmentID        live.SegmentID
+	IdempotencyKey   string
+	Duration         time.Duration
+	Direction        live.Direction
+	World            live.WorldState
+	Spec             GenerationSpec
+	References       []string
 }
 
 type Job struct {
@@ -103,4 +110,9 @@ type Generator interface {
 	Status(context.Context, string) (Job, error)
 	Result(context.Context, string) (Result, error)
 	Cancel(context.Context, string) error
+}
+
+// RequestBuilder freezes provider settings before the attempt is persisted.
+type RequestBuilder interface {
+	BuildRequest(Request) (Request, error)
 }

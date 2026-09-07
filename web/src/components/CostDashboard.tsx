@@ -22,9 +22,13 @@ export function CostDashboard({
   config: GenerationConfig | null
   history: MetricPoint[]
 }) {
-  const clipCost = config ? config.unitPriceCnyPerSecond * config.durationSeconds : null
-  const total = snapshot.generation.costCny
-  const hourly = snapshot.generation.costPerLiveHourCny
+  const clipCost =
+    config?.unitPriceCnyPerSecond != null
+      ? config.unitPriceCnyPerSecond * config.durationSeconds
+      : null
+  const total = config?.provider.toLowerCase() === "fal" ? null : snapshot.generation.costCny
+  const hourly =
+    config?.provider.toLowerCase() === "fal" ? null : snapshot.generation.costPerLiveHourCny
   const pending = clipCost === null ? null : clipCost * snapshot.generation.inFlight
 
   return (
@@ -33,7 +37,7 @@ export function CostDashboard({
         <div className="mb-3">
           <p className="eyebrow">实时成本</p>
           <h2 id="cost-heading" className="section-title">
-            MiniMax 生成成本
+            视频生成成本
           </h2>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -76,7 +80,7 @@ export function CostDashboard({
           />
           <MetricCard
             label="单价"
-            value={config ? `¥${formatNumber(config.unitPriceCnyPerSecond, 2)}` : "—"}
+            value={money(config?.unitPriceCnyPerSecond ?? null)}
             detail="每输出秒"
             icon={CircleDollarSign}
             tooltip="MiniMax 中国区按量计费刊例价。"
@@ -113,7 +117,7 @@ export function CostDashboard({
           </Table>
           <p className="mt-4 text-xs leading-5 text-[var(--text-dim)]">
             失败、取消或安全审核未通过的任务不计入成功成本；页面金额根据官方刊例价估算，最终以
-            MiniMax 账单为准。
+            供应商账单为准。fal 使用美元计费，本页不进行人民币换算。
           </p>
         </CardContent>
       </Card>

@@ -66,7 +66,7 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
                 className="absolute inset-y-0 z-10 border-l border-dashed border-cyan-400/80"
                 style={{ left: `${commitPosition}%` }}
               >
-                <span className="absolute left-2 top-2 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-300">
+                <span className="absolute left-2 top-2 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider text-cyan-600">
                   提交边界
                 </span>
               </div>
@@ -97,9 +97,7 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
                         {segmentLabel(segment.status)}
                       </span>
                       {segment.source === "fallback" && (
-                        <span className="mt-1 block text-[9px] font-bold text-amber-600 dark:text-amber-300">
-                          备用
-                        </span>
+                        <span className="mt-1 block text-[9px] font-bold text-amber-600">备用</span>
                       )}
                     </li>
                   )

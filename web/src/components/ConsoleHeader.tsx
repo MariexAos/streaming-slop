@@ -1,15 +1,6 @@
 import type { ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
-import {
-  Activity,
-  AlertTriangle,
-  Pause,
-  Play,
-  Radio,
-  RotateCcw,
-  ServerCog,
-  ShieldAlert,
-} from "lucide-react"
+import { Activity, AlertTriangle, Pause, Play, Radio, RotateCcw, ShieldAlert } from "lucide-react"
 import { sendCommand, type OpsCommand } from "@/lib/api"
 import { toneForStatus, statusLabel, connectionLabel } from "@/lib/status"
 import { useSnapshot } from "@/queries/ops"
@@ -27,8 +18,8 @@ export function ConsoleHeader({ children }: { children: ReactNode }) {
   const labels: Record<string, string> = {
     start: "启动",
     stop: "停止",
-    fallback: "备用画面",
-    "force-fallback": "强制备用画面",
+    "enable-fallback": "启用备用画面",
+    "disable-fallback": "解除备用画面",
   }
   const commandMessage = mutation.isSuccess
     ? `命令已接受：${labels[mutation.data.command] ?? mutation.data.command}`
@@ -47,7 +38,7 @@ export function ConsoleHeader({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 sm:px-6 xl:flex-row xl:items-center xl:justify-between xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[var(--brand)] text-slate-950 shadow-[0_0_28px_color-mix(in_srgb,var(--accent)_28%,transparent)]">
+            <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[var(--brand)] text-white">
               <Radio className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -66,20 +57,10 @@ export function ConsoleHeader({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          {children}
-
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={connection === "open" ? "success" : "warning"}>
               <Activity className="size-3" aria-hidden="true" />
               实时连接 {connectionLabel(connection)}
-            </Badge>
-            <Badge tone={toneForStatus(snapshot.generation.mode)}>
-              <ServerCog className="size-3" aria-hidden="true" />
-              生成器 {statusLabel(snapshot.generation.mode)}
-            </Badge>
-            <Badge tone={toneForStatus(snapshot.stream.status)}>
-              <Radio className="size-3" aria-hidden="true" />
-              推流 {statusLabel(snapshot.stream.status)}
             </Badge>
             <span className="mx-1 hidden h-7 w-px bg-[var(--line)] lg:block" />
             <Button
@@ -109,31 +90,33 @@ export function ConsoleHeader({ children }: { children: ReactNode }) {
                 <RotateCcw className="size-4" aria-hidden="true" />
                 解除备用画面
               </Button>
-            ) : (
+            ) : snapshot.controls.canEnableFallback ? (
               <ConfirmControl
                 title="强制切换到备用画面？"
                 description="系统将在下一个片段边界切换到预制备用画面，缓冲恢复后可继续播放生成内容。"
                 confirmLabel="启用备用画面"
                 disabled={!snapshot.controls.canEnableFallback || mutation.isPending}
                 onConfirm={() => command("enable-fallback")}
-                danger
               >
                 <ShieldAlert className="size-4" aria-hidden="true" />
                 强制备用画面
               </ConfirmControl>
-            )}
+            ) : null}
           </div>
         </div>
+        <div className="mx-auto max-w-[1600px] overflow-x-auto px-4 pb-3 sm:px-6 xl:px-8">
+          {children}
+        </div>
       </header>
-      <div aria-live="polite" className="min-h-6">
+      <div aria-live="polite" className="mx-auto max-w-[1600px] px-4 sm:px-6 xl:px-8">
         {(mutation.error?.message ?? dataError ?? query.error?.message) && (
-          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-600 dark:text-rose-300">
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-600">
             <AlertTriangle className="size-4" aria-hidden="true" />
             {mutation.error?.message ?? dataError ?? query.error?.message}
           </p>
         )}
         {commandMessage && !mutation.error?.message && (
-          <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-300">
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600">
             <Activity className="size-4" aria-hidden="true" />
             {commandMessage}
           </p>

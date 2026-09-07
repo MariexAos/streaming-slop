@@ -1,0 +1,17 @@
+# Disposable integration database; separate from the development compose project.
+services:
+  postgres:
+    image: postgres:16.15
+    environment:
+      POSTGRES_DB: streaming_quality
+      POSTGRES_USER: quality
+      POSTGRES_PASSWORD: quality
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quality -d streaming_quality"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

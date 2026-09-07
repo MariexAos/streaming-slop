@@ -17,18 +17,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"streaming-agent/internal/adapter/in/bilibili"
-	"streaming-agent/internal/adapter/in/httpapi"
-	"streaming-agent/internal/adapter/in/webui"
-	"streaming-agent/internal/adapter/out/ffmpeg"
-	"streaming-agent/internal/adapter/out/minimax"
-	"streaming-agent/internal/adapter/out/qwen"
-	postgresstore "streaming-agent/internal/adapter/out/storage/postgres"
 	"streaming-agent/internal/audience"
+	"streaming-agent/internal/audience/bilibili"
+	"streaming-agent/internal/config"
 	"streaming-agent/internal/generation"
+	"streaming-agent/internal/generation/minimax"
+	minimaxInference "streaming-agent/internal/inference/minimax"
+	"streaming-agent/internal/inference/qwen"
 	"streaming-agent/internal/monitoring"
-	"streaming-agent/internal/platform/config"
+	httpapi "streaming-agent/internal/server"
+	"streaming-agent/internal/server/webui"
 	"streaming-agent/internal/session"
+	postgresstore "streaming-agent/internal/store"
+	"streaming-agent/internal/streaming/ffmpeg"
 )
 
 func main() {
@@ -61,71 +62,71 @@ func run() error {
 	if err := store.Migrate(rootCtx); err != nil {
 		return err
 	}
-	secrets, err := store.ProviderSecrets(rootCtx)
-	if err != nil {
+	if err := loadProviderSecrets(rootCtx, store, &cfg); err != nil {
 		return err
-	}
-	if cfg.QwenAPIKey == "" {
-		cfg.QwenAPIKey = secrets.QwenAPIKey
-	}
-	if cfg.MiniMaxAPIKey == "" {
-		cfg.MiniMaxAPIKey = secrets.MiniMaxAPIKey
 	}
 
-	qwenClient := qwen.New(qwen.Config{
-		APIKey: cfg.QwenAPIKey, BaseURL: cfg.QwenBaseURL,
-		ObserverModel: cfg.QwenObserverModel, DirectorModel: cfg.QwenDirectorModel,
-	})
-	generatorClient, err := minimax.New(minimax.Config{
-		APIKey: cfg.MiniMaxAPIKey, BaseURL: cfg.MiniMaxBaseURL, DataDir: cfg.DataDir,
-		Settings: minimax.DefaultSettings(),
-	})
+	if err := store.ConfigureBudget(rootCtx, 10_000_000); err != nil {
+		return err
+	}
+	catalog, err := configureCharacter(rootCtx, store, cfg)
 	if err != nil {
 		return err
 	}
-	output, err := ffmpeg.NewOutput(ffmpeg.OutputConfig{FFmpegPath: cfg.FFmpegPath, RTMPURL: cfg.RTMPURL})
+	qwenClient := configureQwen(cfg)
+	generatorClient, err := configureMiniMax(cfg)
 	if err != nil {
 		return err
 	}
-	preparer := ffmpeg.NewPreparer(ffmpeg.PreparerConfig{FFmpegPath: cfg.FFmpegPath, FFprobePath: cfg.FFprobePath})
-	schedulerConfig := generation.DefaultSchedulerConfig(cfg.GenerationMaxConcurrency)
-	schedulerConfig.InitialConcurrency = cfg.InitialConcurrency
-	schedulerConfig.SegmentDuration = cfg.SegmentDuration
-	scheduler := generation.NewScheduler(schedulerConfig)
+	producer, generationController, err := configureGenerator(cfg, generatorClient, store)
+	if err != nil {
+		return err
+	}
+	producer = generation.Budgeted{Generator: producer, Budget: store}
+	startReconciliation(rootCtx, store, producer, cfg.GenerationProvider)
+	output, preparer, err := configureMedia(cfg)
+	if err != nil {
+		return err
+	}
+
+	m3 := minimaxInference.New(cfg.MiniMaxAPIKey, store)
+	scheduler := configureScheduler(cfg)
 
 	registry := prometheus.NewRegistry()
 	metrics := monitoring.NewMetrics(registry)
 	hub := monitoring.NewHub(monitoring.EmptySnapshot(time.Now().UTC(), cfg.ReadyTarget, cfg.SubmittedTarget, cfg.CommitHorizon))
-	audienceWindow := audience.NewWindow(20 * time.Second)
-	bilibiliManager := bilibili.NewManager(audienceWindow)
-	defer bilibiliManager.Close()
-	if cfg.BilibiliRoomID > 0 {
-		if err := bilibiliManager.Update(cfg.BilibiliRoomID, cfg.BilibiliCookie); err != nil {
-			return err
-		}
+	audienceWindow, bilibiliManager, err := configureAudience(cfg)
+	if err != nil {
+		return err
 	}
+	defer bilibiliManager.Close()
 	runtime := session.NewRuntime(session.RuntimeConfig{
-		Audience: audienceWindow, Observer: qwenClient,
+		Speech: m3, Continuous: true, Inspector: m3, Frames: preparer, Catalog: catalog, Audience: audienceWindow, Observer: m3,
 		StorySeed: cfg.StorySeed, Character: cfg.Character, AnchorFrames: anchorFrames(),
 		SegmentDuration: cfg.SegmentDuration, CommitHorizon: cfg.CommitHorizon,
 		ReadyTarget: cfg.ReadyTarget, SubmittedTarget: cfg.SubmittedTarget,
 		PlannedHorizon: cfg.PlannedHorizon, SchedulerInterval: cfg.SchedulerInterval,
 		PollInterval: cfg.GenerationPoll, FallbackExitReady: cfg.FallbackExitReady,
-		DataDir: filepath.Clean(cfg.DataDir), Provider: "minimax",
-	}, store, qwenClient, generatorClient, preparer, output, scheduler, hub, metrics, slog.Default())
+		DataDir: filepath.Clean(cfg.DataDir), Provider: cfg.GenerationProvider,
+	}, store, m3, producer, preparer, output, scheduler, hub, metrics, slog.Default())
 	if err := runtime.Recover(rootCtx); err != nil {
 		return err
 	}
 
 	handler := httpapi.New(
 		runtime, hub, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), webui.NewHandler(),
-		generationConfigController{client: generatorClient, store: store}, bilibiliConfigController{manager: bilibiliManager, audience: audienceWindow},
+		generationController, bilibiliConfigController{manager: bilibiliManager, audience: audienceWindow},
 		qwenConfigController{client: qwenClient, store: store},
 	)
+	return serve(rootCtx, managementHandler(catalog, store, handler, unresolvedHandler(store, runtime, producer, cfg.GenerationProvider)), runtime)
+}
+
+func serve(rootCtx context.Context, handler http.Handler, runtime *session.Runtime) error {
 	server := &http.Server{
 		Addr: config.HTTPAddr, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second,
 	}
+
 	serverErrors := make(chan error, 1)
 	go func() {
 		slog.Info("operations console listening", "address", config.HTTPAddr)
@@ -268,6 +269,57 @@ func (c generationConfigController) project(settings minimax.Settings) (httpapi.
 		Provider: "MiniMax", BaseURL: c.client.BaseURL(), Model: settings.Model,
 		Resolution: settings.Resolution, DurationSeconds: settings.Duration,
 		Ratio: settings.Ratio, APIKeyConfigured: c.client.APIKeyConfigured(),
-		UnitPriceCNYPerSecond: price,
+		UnitPriceCNYPerSecond: &price,
 	}, nil
+}
+
+func loadProviderSecrets(rootCtx context.Context, store *postgresstore.Store, cfg *config.Config) error {
+	secrets, err := store.ProviderSecrets(rootCtx)
+	if err != nil {
+		return err
+	}
+	if cfg.QwenAPIKey == "" {
+		cfg.QwenAPIKey = secrets.QwenAPIKey
+	}
+	if cfg.MiniMaxAPIKey == "" {
+		cfg.MiniMaxAPIKey = secrets.MiniMaxAPIKey
+	}
+
+	return nil
+}
+
+func configureMedia(cfg config.Config) (*ffmpeg.Output, *ffmpeg.Preparer, error) {
+	output, err := ffmpeg.NewOutput(ffmpeg.OutputConfig{FFmpegPath: cfg.FFmpegPath, RTMPURL: cfg.RTMPURL})
+	preparer := ffmpeg.NewPreparer(ffmpeg.PreparerConfig{FFmpegPath: cfg.FFmpegPath, FFprobePath: cfg.FFprobePath, Duration: cfg.SegmentDuration})
+	return output, preparer, err
+}
+
+func configureAudience(cfg config.Config) (*audience.Window, *bilibili.Manager, error) {
+	window := audience.NewWindow(20 * time.Second)
+	manager := bilibili.NewManager(window)
+	if cfg.BilibiliRoomID > 0 {
+		if err := manager.Update(cfg.BilibiliRoomID, cfg.BilibiliCookie); err != nil {
+			manager.Close()
+			return nil, nil, err
+		}
+	}
+	return window, manager, nil
+}
+
+func configureMiniMax(cfg config.Config) (*minimax.Client, error) {
+	return minimax.New(minimax.Config{
+		APIKey: cfg.MiniMaxAPIKey, BaseURL: cfg.MiniMaxBaseURL, DataDir: cfg.DataDir,
+		Settings: minimax.Settings{Model: cfg.MiniMaxModel, Resolution: cfg.MiniMaxResolution, Duration: int(cfg.SegmentDuration / time.Second), Ratio: cfg.MiniMaxRatio},
+	})
+}
+
+func configureScheduler(cfg config.Config) generation.Scheduler {
+	c := generation.DefaultSchedulerConfig(cfg.GenerationMaxConcurrency)
+	c.InitialConcurrency = cfg.InitialConcurrency
+	c.SegmentDuration = cfg.SegmentDuration
+	return generation.NewScheduler(c)
+}
+
+func configureQwen(cfg config.Config) *qwen.Client {
+	return qwen.New(qwen.Config{APIKey: cfg.QwenAPIKey, BaseURL: cfg.QwenBaseURL, ObserverModel: cfg.QwenObserverModel, DirectorModel: cfg.QwenDirectorModel})
 }

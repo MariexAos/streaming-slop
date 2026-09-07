@@ -102,18 +102,8 @@ func (s Scheduler) Select(
 	if Mode(readyAhead) == ModePause {
 		return nil
 	}
-	attemptCount := make(map[live.SegmentID]int)
-	active := make(map[live.SegmentID]bool)
-	inFlight := 0
-	for _, attempt := range attempts {
-		if attempt.Number > attemptCount[attempt.SegmentID] {
-			attemptCount[attempt.SegmentID] = attempt.Number
-		}
-		if !attempt.Terminal() {
-			active[attempt.SegmentID] = true
-			inFlight++
-		}
-	}
+	attemptCount, active, inFlight := currentAttempts(segments, attempts)
+
 	slots := s.TargetConcurrency(successLatencies) - inFlight
 	if s.config.MaxSubmissionsPerTick > 0 && slots > s.config.MaxSubmissionsPerTick {
 		slots = s.config.MaxSubmissionsPerTick
@@ -148,4 +138,29 @@ func clamp(value, minimum, maximum int) int {
 		return maximum
 	}
 	return value
+}
+
+func currentAttempts(segments []live.Segment, attempts []Attempt) (map[live.SegmentID]int, map[live.SegmentID]bool, int) {
+	attemptCount := make(map[live.SegmentID]int)
+	active := make(map[live.SegmentID]bool)
+	inFlight := 0
+	revisions := make(map[live.SegmentID]int64)
+	for _, segment := range segments {
+		revisions[segment.ID] = segment.PlanRevision
+	}
+	for _, attempt := range attempts {
+		if !attempt.Terminal() {
+			inFlight++
+		}
+		if attempt.PlanRevision != revisions[attempt.SegmentID] {
+			continue
+		}
+		if attempt.Number > attemptCount[attempt.SegmentID] {
+			attemptCount[attempt.SegmentID] = attempt.Number
+		}
+		if !attempt.Terminal() {
+			active[attempt.SegmentID] = true
+		}
+	}
+	return attemptCount, active, inFlight
 }

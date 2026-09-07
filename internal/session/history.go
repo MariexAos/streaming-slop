@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"streaming-agent/internal/audience"
 	"streaming-agent/internal/live"
-	"streaming-agent/internal/observer"
 )
 
 var ErrHistoryNotFound = errors.New("session history not found")
@@ -33,7 +33,7 @@ type HistorySegment struct {
 type ObserverRun struct {
 	Revision    uint64               `json:"revision"`
 	Messages    []string             `json:"messages"`
-	Observation observer.Observation `json:"observation"`
+	Observation audience.Observation `json:"observation"`
 	Error       *string              `json:"error"`
 	CreatedAt   time.Time            `json:"createdAt"`
 }

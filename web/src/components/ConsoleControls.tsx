@@ -29,7 +29,7 @@ export function NavButton({
       type="button"
       aria-current={active ? "page" : undefined}
       onClick={onClick}
-      className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${active ? "bg-[var(--accent)] text-slate-950" : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"}`}
+      className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${active ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"}`}
     >
       <Icon className="size-3.5" aria-hidden="true" />
       {children}
@@ -85,7 +85,7 @@ export function LoadingState({ message }: { message: string | null }) {
   return (
     <main className="grid min-h-screen place-items-center px-6">
       <div className="max-w-md text-center">
-        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[var(--brand)] text-slate-950">
+        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[var(--brand)] text-white">
           <Radio className="size-6 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
         </div>
         <h1 className="mt-5 text-xl font-bold text-[var(--text)]">正在连接运行时</h1>
@@ -93,7 +93,7 @@ export function LoadingState({ message }: { message: string | null }) {
           正在等待第一份有效运行快照。
         </p>
         {message && (
-          <p role="alert" className="mt-4 text-sm text-rose-600 dark:text-rose-300">
+          <p role="alert" className="mt-4 text-sm text-rose-600">
             {message}
           </p>
         )}

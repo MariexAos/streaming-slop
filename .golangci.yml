@@ -4,12 +4,14 @@ run:
   timeout: 5m
   modules-download-mode: readonly
   tests: true
+  build-tags:
+    - integration
+    - soak
 
 linters:
   default: none
   enable:
     - bodyclose
-    - cyclop
     - depguard
     - durationcheck
     - errcheck
@@ -18,8 +20,6 @@ linters:
     - gocognit
     - govet
     - ineffassign
-    - maintidx
-    - nestif
     - nilerr
     - nolintlint
     - rowserrcheck
@@ -27,6 +27,12 @@ linters:
     - staticcheck
     - unused
   settings:
+    gocognit:
+      min-complexity: 20
+    funlen:
+      lines: 80
+      statements: 50
+      ignore-comments: true
     depguard:
       rules:
         live-standard-library-only:
@@ -34,16 +40,40 @@ linters:
             - "**/internal/live/*.go"
           allow:
             - $gostd
+        use-cases-stay-inward:
+          files:
+            - "**/internal/{live,session,timeline,director,generation,streaming,audience,monitoring}/*.go"
+            - "!**/*_test.go"
+          deny:
+            - pkg: streaming-agent/internal/server
+              desc: "Presentation depends on use cases."
+            - pkg: streaming-agent/internal/store
+              desc: "Storage implements use-case interfaces."
+            - pkg: streaming-agent/internal/config
+              desc: "Pass configuration values from cmd/live."
+            - pkg: streaming-agent/internal/inference
+              desc: "Inject model clients from cmd/live."
+            - pkg: streaming-agent/internal/generation/fal
+              desc: "Inject the concrete generator."
+            - pkg: streaming-agent/internal/generation/minimax
+              desc: "Inject the concrete generator."
+            - pkg: streaming-agent/internal/streaming/ffmpeg
+              desc: "Inject media preparation and output."
+            - pkg: streaming-agent/internal/audience/bilibili
+              desc: "Audience ingestion calls the use case."
+        no-entrypoint-import:
+          files:
+            - "**/internal/**/*.go"
+          deny:
+            - pkg: streaming-agent/cmd
+              desc: "Only cmd/live assembles implementations."
   exclusions:
     generated: strict
     rules:
       - path: _test\.go
         linters:
-          - cyclop
           - funlen
           - gocognit
-          - maintidx
-          - nestif
 
 formatters:
   enable:

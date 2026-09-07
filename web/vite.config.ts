@@ -13,8 +13,16 @@ const hookRules = Object.fromEntries(
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    host: "0.0.0.0",
+    proxy: { "/api": "http://127.0.0.1:8080" },
+  },
+  preview: {
+    host: "0.0.0.0",
+    proxy: { "/api": "http://127.0.0.1:8080" },
+  },
   resolve: { alias: { "@": new URL("./src", import.meta.url).pathname } },
-  build: { outDir: "../internal/adapter/in/webui/dist", emptyOutDir: true },
+  build: { outDir: "../internal/server/webui/dist", emptyOutDir: true },
   fmt: {
     semi: false,
     singleQuote: false,

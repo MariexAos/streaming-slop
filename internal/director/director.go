@@ -19,6 +19,7 @@ type Director interface {
 
 // Input contains only the continuity facts needed for one direction decision.
 type Input struct {
+	Duration  time.Duration   `json:"-"`
 	World     live.WorldState `json:"world"`
 	StorySeed string          `json:"storySeed"`
 	Previous  *live.Direction `json:"previous,omitempty"`
@@ -36,18 +37,20 @@ type AudienceInput struct {
 
 func (in Input) MarshalJSON() ([]byte, error) {
 	type inputJSON struct {
-		World      live.WorldState `json:"world"`
-		StorySeed  string          `json:"storySeed"`
-		Previous   *live.Direction `json:"previous,omitempty"`
-		Audience   *AudienceInput  `json:"audience,omitempty"`
-		PositionMS int64           `json:"positionMs"`
+		DurationSeconds float64         `json:"durationSeconds"`
+		World           live.WorldState `json:"world"`
+		StorySeed       string          `json:"storySeed"`
+		Previous        *live.Direction `json:"previous,omitempty"`
+		Audience        *AudienceInput  `json:"audience,omitempty"`
+		PositionMS      int64           `json:"positionMs"`
 	}
 	return json.Marshal(inputJSON{
-		World:      in.World,
-		StorySeed:  in.StorySeed,
-		Previous:   in.Previous,
-		Audience:   in.Audience,
-		PositionMS: in.Position.Milliseconds(),
+		DurationSeconds: in.Duration.Seconds(),
+		World:           in.World,
+		StorySeed:       in.StorySeed,
+		Previous:        in.Previous,
+		Audience:        in.Audience,
+		PositionMS:      in.Position.Milliseconds(),
 	})
 }
 

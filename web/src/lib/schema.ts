@@ -128,12 +128,17 @@ export const generationConfigSchema = z
   .object({
     provider: z.string().min(1),
     baseUrl: z.string().url(),
-    model: z.literal("MiniMax-H3-Max"),
+    model: z.enum([
+      "MiniMax-H3-Max",
+      "minimax/h3-max/reference-to-video",
+      "minimax/h3-max/image-to-video",
+      "minimax/h3-max-turbo/image-to-video",
+    ]),
     resolution: z.literal("768P"),
-    durationSeconds: z.literal(5),
-    ratio: z.literal("16:9"),
+    durationSeconds: z.number().int().min(5).max(15),
+    ratio: z.enum(["16:9", "adaptive"]),
     apiKeyConfigured: z.boolean(),
-    unitPriceCnyPerSecond: nonNegative,
+    unitPriceCnyPerSecond: nonNegative.nullable(),
   })
   .strict()
 

@@ -52,7 +52,7 @@ export function FlowDashboard({
         </div>
       </div>
 
-      {error && <p className="text-sm text-rose-600 dark:text-rose-300">{error}</p>}
+      {error && <p className="text-sm text-rose-600">{error}</p>}
       {!active || !current ? (
         <EmptyFlow />
       ) : (

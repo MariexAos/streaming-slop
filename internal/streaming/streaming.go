@@ -7,6 +7,8 @@ import (
 
 // PrepareRequest identifies an input asset and the normalized output path.
 type PrepareRequest struct {
+	AudioPath       string
+	Duration        time.Duration
 	SourcePath      string
 	DestinationPath string
 }

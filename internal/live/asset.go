@@ -13,6 +13,7 @@ const (
 )
 
 type VideoAsset struct {
+	Observed      WorldDelta    `json:"observed,omitempty"`
 	ID            AssetID       `json:"id"`
 	AttemptID     AttemptID     `json:"attemptId,omitempty"`
 	Source        AssetSource   `json:"source"`

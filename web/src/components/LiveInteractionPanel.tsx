@@ -38,7 +38,7 @@ export function LiveInteractionPanel({
         <CardHeader>
           <CardTitle className="inline-flex items-center gap-2">
             <Radio className="size-4 text-[var(--accent)]" />
-            本地直播预览
+            画面预览
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -64,14 +64,14 @@ export function LiveInteractionPanel({
             <div className="relative aspect-video overflow-hidden rounded-xl border border-[var(--line)] bg-black">
               <img
                 src="/anchorframes/chat-live-start.png"
-                alt="主播预览占位画面"
-                className="size-full object-cover opacity-55"
+                alt="人物参考画面，非实时直播"
+                className="size-full object-cover"
               />
-              <div className="absolute inset-0 grid place-items-center bg-black/35 p-6 text-center text-white">
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-6 pb-5 pt-16 text-white">
                 <div>
-                  <Radio className="mx-auto size-7" />
+                  <Radio className="size-5" />
                   <p className="mt-3 font-bold">{previewStatusLabel(streamStatus)}</p>
-                  <p className="mt-1 text-xs text-white/75">首个片段生成后会在这里直接播放</p>
+                  <p className="mt-1 text-xs text-white/75">人物参考画面 · 首个片段就绪后可预览</p>
                 </div>
               </div>
             </div>
@@ -82,7 +82,7 @@ export function LiveInteractionPanel({
         <CardHeader>
           <CardTitle className="inline-flex items-center gap-2">
             <MessageCircleMore className="size-4 text-[var(--accent)]" />
-            发送测试弹幕
+            测试互动
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -114,17 +114,17 @@ export function LiveInteractionPanel({
             </label>
             <Button type="submit" variant="primary" disabled={saving || !text.trim()}>
               <Send className="size-4" aria-hidden="true" />
-              {saving ? "发送中…" : "发送并影响后续方向"}
+              {saving ? "发送中…" : "发送弹幕"}
             </Button>
           </form>
           <div aria-live="polite" className="mt-3 min-h-10 text-xs leading-5">
             {error ? (
-              <span className="text-rose-600 dark:text-rose-300">{error}</span>
+              <span className="text-rose-600">{error}</span>
             ) : message ? (
-              <span className="text-emerald-600 dark:text-emerald-300">{message}</span>
+              <span className="text-emerald-600">{message}</span>
             ) : (
               <span className="text-[var(--text-dim)]">
-                本地与 Bilibili 弹幕会合并进同一个最近 20 秒窗口，再交给 Observer。
+                发送后会在后续片段中体现，不会立即改变正在播放的画面。
               </span>
             )}
           </div>
@@ -137,5 +137,5 @@ export function LiveInteractionPanel({
 function previewStatusLabel(status: string) {
   if (status === "starting") return "正在准备直播画面"
   if (status === "failed") return "推流启动失败"
-  return "推流已停止"
+  return "等待开播"
 }

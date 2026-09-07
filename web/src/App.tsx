@@ -15,11 +15,11 @@ export function App() {
   return (
     <TooltipProvider delayDuration={250}>
       <div className="min-h-screen">
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:block focus:p-4">
+          跳到主要内容
+        </a>
         <ConsoleHeader>
-          <nav
-            className="flex items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-1"
-            aria-label="管理看板"
-          >
+          <nav className="flex w-max items-center gap-1" aria-label="管理看板">
             <NavButton
               active={view === "operations"}
               onClick={() => setView("operations")}
@@ -28,7 +28,7 @@ export function App() {
               运行
             </NavButton>
             <NavButton active={view === "flow"} onClick={() => setView("flow")} icon={Workflow}>
-              Flow
+              生成流程
             </NavButton>
             <NavButton
               active={view === "history"}
@@ -45,9 +45,12 @@ export function App() {
             </NavButton>
           </nav>
         </ConsoleHeader>
-        <main className="mx-auto max-w-[1600px] space-y-5 px-4 py-6 sm:px-6 xl:px-8">
+        <main
+          id="main-content"
+          className="mx-auto max-w-[1600px] space-y-5 px-4 py-6 sm:px-6 xl:px-8"
+        >
           {view === "operations" ? (
-            <OperationsDashboard />
+            <OperationsDashboard onConfigure={() => setView("config")} />
           ) : view === "flow" ? (
             <FlowPage />
           ) : view === "cost" ? (

@@ -74,13 +74,15 @@ export function GenerationConfigPanel({
   if (!config)
     return <p className="text-sm text-[var(--text-muted)]">{error ?? "正在加载生成配置…"}</p>
 
+  const isFal = config.provider.toLowerCase() === "fal"
+  const unitPrice = config.unitPriceCnyPerSecond
   const save = async () => {
     const value = apiKey.trim()
     const saved = await onSave({
-      model: "MiniMax-H3-Max",
+      model: config.model,
       resolution: "768P",
-      durationSeconds: 5,
-      ratio: "16:9",
+      durationSeconds: config.durationSeconds,
+      ratio: config.ratio,
       ...(value ? { apiKey: value } : {}),
     })
     if (saved) setAPIKey("")
@@ -115,7 +117,7 @@ export function GenerationConfigPanel({
     <div className="space-y-5">
       <div>
         <p className="eyebrow">运行配置</p>
-        <h2 className="section-title">MiniMax 视频生成</h2>
+        <h2 className="section-title">{config.provider} 视频生成</h2>
       </div>
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card>
@@ -125,10 +127,11 @@ export function GenerationConfigPanel({
           <CardContent className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-semibold text-[var(--text-muted)] sm:col-span-2">
-                MiniMax API Key
+                {config.provider} API Key
                 <input
                   className={fieldClass}
                   type="password"
+                  disabled={isFal}
                   autoComplete="new-password"
                   value={apiKey}
                   onChange={(event) => setAPIKey(event.target.value)}
@@ -139,7 +142,7 @@ export function GenerationConfigPanel({
               </label>
               <label className="text-sm font-semibold text-[var(--text-muted)]">
                 模型
-                <input className={fieldClass} value="MiniMax-H3-Max（在线固定）" disabled />
+                <input className={fieldClass} value={config.model} disabled />
               </label>
               <label className="text-sm font-semibold text-[var(--text-muted)]">
                 分辨率
@@ -151,17 +154,17 @@ export function GenerationConfigPanel({
               </label>
               <label className="text-sm font-semibold text-[var(--text-muted)]">
                 片段时长
-                <input className={fieldClass} value="5 秒（直播契约固定）" disabled />
+                <input className={fieldClass} value={`${config.durationSeconds} 秒`} disabled />
               </label>
             </div>
             <div aria-live="polite" className="min-h-5 text-sm">
               {error ? (
-                <span className="text-rose-600 dark:text-rose-300">{error}</span>
+                <span className="text-rose-600">{error}</span>
               ) : message ? (
-                <span className="text-emerald-600 dark:text-emerald-300">{message}</span>
+                <span className="text-emerald-600">{message}</span>
               ) : null}
             </div>
-            <Button variant="primary" disabled={saving} onClick={() => void save()}>
+            <Button variant="primary" disabled={saving || isFal} onClick={() => void save()}>
               <Save className="size-4" aria-hidden="true" />
               {saving ? "保存中…" : "保存配置"}
             </Button>
@@ -196,13 +199,15 @@ export function GenerationConfigPanel({
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-[var(--text-muted)]">输出单价</dt>
                   <dd className="font-mono">
-                    ¥{formatNumber(config.unitPriceCnyPerSecond, 2)} / 秒
+                    {unitPrice === null ? "未换算人民币" : `¥${formatNumber(unitPrice, 2)} / 秒`}
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-[var(--text-muted)]">预计每片段</dt>
                   <dd className="font-mono font-semibold">
-                    ¥{formatNumber(config.unitPriceCnyPerSecond * config.durationSeconds, 2)}
+                    {unitPrice === null
+                      ? "—"
+                      : `¥${formatNumber(unitPrice * config.durationSeconds, 2)}`}
                   </dd>
                 </div>
               </dl>
@@ -214,15 +219,16 @@ export function GenerationConfigPanel({
               </p>
             </div>
             <p className="text-xs leading-5 text-[var(--text-dim)]">
-              成本按当前模型、分辨率和输出秒数估算，暂不支持修改，最终以 MiniMax 账单为准。API Key
-              保存后立即生效，管理接口不会返回明文。
+              {isFal
+                ? "fal 通过服务端环境配置，调整后需停止会话并重启；费用以 fal 美元账单为准。"
+                : "成本按输出秒数估算，以 MiniMax 账单为准。API Key 保存后立即生效，管理接口不会返回明文。"}
             </p>
           </CardContent>
         </Card>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Qwen 控场模型</CardTitle>
+          <CardTitle>Qwen 备用配置（当前使用 M3）</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 lg:grid-cols-[2fr_1fr]">
           <div className="space-y-5">
@@ -271,9 +277,9 @@ export function GenerationConfigPanel({
             </div>
             <div aria-live="polite" className="min-h-5 text-sm">
               {qwenError ? (
-                <span className="text-rose-600 dark:text-rose-300">{qwenError}</span>
+                <span className="text-rose-600">{qwenError}</span>
               ) : qwenMessage ? (
-                <span className="text-emerald-600 dark:text-emerald-300">{qwenMessage}</span>
+                <span className="text-emerald-600">{qwenMessage}</span>
               ) : null}
             </div>
             <Button
@@ -353,9 +359,9 @@ export function GenerationConfigPanel({
             </p>
             <div aria-live="polite" className="min-h-5 text-sm">
               {bilibiliError ? (
-                <span className="text-rose-600 dark:text-rose-300">{bilibiliError}</span>
+                <span className="text-rose-600">{bilibiliError}</span>
               ) : bilibiliMessage ? (
-                <span className="text-emerald-600 dark:text-emerald-300">{bilibiliMessage}</span>
+                <span className="text-emerald-600">{bilibiliMessage}</span>
               ) : null}
             </div>
             <Button
@@ -402,9 +408,9 @@ export function GenerationConfigPanel({
               </div>
               <div aria-live="polite" className="mt-3 min-h-5 text-xs">
                 {mockError ? (
-                  <span className="text-rose-600 dark:text-rose-300">{mockError}</span>
+                  <span className="text-rose-600">{mockError}</span>
                 ) : mockMessage ? (
-                  <span className="text-emerald-600 dark:text-emerald-300">{mockMessage}</span>
+                  <span className="text-emerald-600">{mockMessage}</span>
                 ) : (
                   <span className="text-[var(--text-dim)]">
                     无需连接 Bilibili，发送后可立即去 Flow 看板观察 20 秒窗口。
@@ -434,7 +440,8 @@ export function GenerationConfigPanel({
               </p>
             </div>
             <p className="text-xs leading-5 text-[var(--text-dim)]">
-              收到的弹幕进入最近 20 秒窗口，只影响尚未提交生成的后续片段，不会改写已计费任务。
+              收到的弹幕进入最近 20
+              秒窗口，只影响尚未锁定播放的未来片段；作废生成任务仍可能产生费用。
             </p>
           </div>
         </CardContent>

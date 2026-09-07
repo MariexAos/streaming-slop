@@ -23,6 +23,8 @@ const (
 )
 
 type Attempt struct {
+	PlanRevision   int64
+	Request        Request
 	ID             live.AttemptID
 	SegmentID      live.SegmentID
 	Number         int
@@ -86,9 +88,7 @@ func (a *Attempt) Transition(to AttemptStatus, now time.Time) error {
 		a.StartedAt = timePointer(now)
 	case AttemptSucceeded, AttemptFailed, AttemptCancelled:
 		a.FinishedAt = timePointer(now)
-		if a.StartedAt != nil {
-			a.Latency = now.Sub(*a.StartedAt)
-		}
+		a.Latency = now.Sub(a.CreatedAt)
 	}
 	return nil
 }

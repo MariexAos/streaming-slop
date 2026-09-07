@@ -1,107 +1,69 @@
 # 架构与代码边界
 
-[返回索引](README.md) · 下一篇：[核心模型](02-domain-model.md)
+[返回索引](README.md)
 
 ## 系统形状
 
-```mermaid
-flowchart LR
-    Audience[观众事件] --> In[Inbound Adapters]
-    In --> Cases[Use Cases\n按业务能力分包]
-    Cases --> Core[Entities\nWorld / Timeline / Segment]
-    Cases --> Director[Director Adapter]
-    Cases --> Generator[Video Generator Adapter]
-    Cases --> Storage[Storage Adapter]
-    Cases --> Media[Media / Stream Adapter]
-    Media --> Platform[OBS 或 RTMP 平台]
-```
+采用 Go 模块化单体。世界状态记录已播放事实，时间线管理可修改的未来，生成任务生产素材，媒体输出报告实际进度。`cmd/live` 显式组装，无依赖注入容器、内部事件总线或工作流引擎。
 
-它是一个模块化单体，不是把多个服务塞进一个进程。模块通过明确类型和用例协作，外部入口不能绕过用例直接改核心状态。
-
-## Clean Architecture 规则
-
-Clean Architecture 定义的是 Entities、Use Cases、Interface Adapters、Frameworks/Drivers 的依赖圈，不是 Go 的目录模板。这里不用 `application/domain` 分层；按业务能力命名 Go 包，同时保持依赖向内：
+## 包归属
 
 ```text
-cmd / adapter / platform
-            |
-            v
-session / timeline / director / generation / streaming / audience
-            |
-            v
-           live
+cmd/live                     配置、组装、生命周期
+internal/
+  live/                      世界、片段、时间线不变量；仅标准库
+  character/                 人物版本、参考图导入与内容校验
+  session/                   会话协调、互动重排、恢复、播放提交
+  timeline/                  提交边界与播放游标
+  audience/                  观众事件聚合、意图分析
+    bilibili/                弹幕协议接入
+  director/                  镜头决策、提示约束、结构化结果
+  generation/                任务、尝试记录、调度
+    minimax/                 MiniMax 直连
+    fal/                     fal 队列 API
+  streaming/                 媒体准备和输出契约
+    ffmpeg/                  转码、媒体输出、进度读取
+  inference/
+    anthropic/               Anthropic 协议
+    qwen/                    Qwen 协议（备用）
+    minimax/                 M3 观察、导演、视觉检查与语音
+  store/                     PostgreSQL 共享事务
+    migrations/              数据库迁移
+  server/                    HTTP、控制台投影
+    flow/                    控制台流程视图
+    webui/                   前端嵌入资源
+  monitoring/                状态观测与指标
+  config/                    配置加载
 ```
 
-- `live`：Entities 与最稳定的不变量，只依赖 Go 标准库。
-- 业务能力包：承载 Use Case，并在使用处定义所需端口。
-- `adapter`：Interface Adapters，把 HTTP、供应商 API、SQL、文件和进程转换为用例语义。
-- `platform`：配置、日志、指标、HTTP server 等通用运行设施，不含直播决策。
-- `cmd/live`：Framework/Driver 一侧的 Composition Root，读取配置并组装具体实现。
+语言模型可同时服务导演与观众分析，因此不归某一个角色包。数据库同时保存会话、片段、尝试和素材，因此不归某个业务子包；当前仅支持 PostgreSQL，不额外抽象驱动层。
 
-端口不是单独的一层，也不集中放进 `ports` 包。`generation.Generator` 由 generation 用例使用方定义，fal Adapter 实现它；`live` 不知道这些端口存在。
+## 依赖规则
 
-## 建议目录
+- `live` 只依赖 Go 标准库。
+- `session` 协调能力包；用例不导入具体供应商、媒体实现、server、store 或 config。
+- 接口由使用方定义；需要替换或测试隔离时才引入接口。
+- `generation` 不导入其 fal/minimax 子包；`streaming` 不导入 ffmpeg。具体实现由入口传入。
+- `store` 实现用例所需操作；事务对象不进入业务代码。
+- 展示 DTO 在 server；Runtime 提供只读状态，不依赖控制台模型。
+- `.golangci.yml` 的依赖规则与此一致。
 
-目录只在对应阶段出现；不创建空壳包。
+## 执行与持久化
 
-```text
-.
-├── cmd/
-│   └── live/
-│       └── main.go              # 组装并启动
-├── internal/
-│   ├── live/                    # Entities 与核心不变量
-│   │   ├── session.go
-│   │   ├── timeline.go
-│   │   ├── segment.go
-│   │   ├── world.go
-│   │   └── direction.go
-│   ├── session/                 # 会话用例与其 Store 接口
-│   ├── timeline/                # 计划、commit 与 playhead 用例
-│   ├── director/                # Direction 用例与 Director 接口
-│   ├── generation/              # Scheduler 与 Generator 接口
-│   ├── streaming/               # 播放用例与 Output 接口
-│   ├── audience/                # 事件接收与聚合用例
-│   ├── adapter/
-│   │   ├── in/
-│   │   │   ├── http/
-│   │   │   └── bilibili/
-│   │   └── out/
-│   │       ├── director/
-│   │       ├── generator/fal/
-│   │       ├── stream/ffmpeg/
-│   │       ├── storage/postgres/
-│   │       └── asset/local/
-│   └── platform/
-│       ├── config/
-│       └── observability/
-├── docs/
-└── web/                         # 需要控制台时再创建
-```
+协调循环分别派发规划、提交、对账工作，每类最多一个在途任务，避免同类任务重入；播放单独执行。数据库是恢复依据，进程内完成通知只负责唤醒协调。
 
-## 包的职责
+外部调用顺序为：保存尝试及请求快照、调用供应商、保存任务编号、对账结果、准备媒体、检查计划版本、发布素材。提交结果不明时保留待核对记录，不能把网络超时等同于供应商没有接单。
 
-| 包 | 可以知道 | 不可以知道 |
-|---|---|---|
-| `live` | 直播世界、Segment/Timeline 不变量 | 端口、HTTP、SQL、模型名、FFmpeg |
-| 业务能力包 | 对应能力的用例、消费方接口、事务边界 | 供应商 DTO、命令行参数 |
-| `adapter/in` | 输入协议、DTO、鉴权 | 业务状态转换细节 |
-| `adapter/out` | 外部协议和错误映射 | 决定何时重试、何时降级 |
-| `platform` | 配置、进程、遥测 | “缓冲少于 15 秒”等业务规则 |
-| `cmd/live` | 具体实现和启动顺序 | 可复用业务逻辑 |
+片段 `PlanRevision` 与数据库乐观锁 `Version` 分开。重规划在提交边界之外原子替换选中的片段；旧尝试仍保留供对账和费用记录。只有版本仍匹配且处于生成状态的片段可以接受素材。当前连续模式会使可修改的后续片段一起失效，完成时验证父素材 ID。
 
-## 模块通信
+媒体允许预送少量已锁定片段。写入 FFmpeg 管道不等于播放完成，播放游标只依据输出媒体时间戳推进。游标、已播放片段和世界状态在一个 PostgreSQL 事务内保存；失败时回滚内存状态，保留待提交回执。
 
-- 外部输入被转换成 Command 或 Event，再调用一个业务用例。
-- 用例通过 `live` 类型的方法改变状态，不绕过不变量直接修改字段。
-- 用例通过自己拥有的小接口访问外部系统。
-- 事务只包围一次清晰的状态转换，不跨越长时间生成任务。
-- 异步工作保存显式状态，由 webhook 或 reconciliation 用例推进。
+## 内容一致性的当前边界
 
-## 保持 Go 风格
+生成请求保存参考素材内容摘要作为锚点版本；导演可选择已有锚点组成首帧或首尾帧请求。不再按片段序号轮换人物锚点或插入无参考的文生镜头。
 
-- 接口放在使用方附近，通常只有 1～3 个方法。
-- 不为纯函数、配置结构或只有一个无需替换的实现创建接口。
-- 使用具体类型构造，按需返回接口；避免 `manager`、`helper`、`utils`、`common` 包。
-- 错误只在能增加业务上下文时包装；只在能处理时记录。
-- 优先小包和显式调用，不引入容器、反射式依赖注入或内部事件框架。
+媒体格式检查后，M3 将生成视频抽帧与固定人物基准图比较。拒绝结果保存并阻止 READY；通过的可见事实只在播放回执事务中更新，下一场直播可读取最近事实。视觉判断仍可能误判，真实测试已发现取景比例偏差，不能把 API 成功当作内容验收通过。
+
+人物采用内容寻址文件和不可变版本，会话固定引用。连续生成读取上一段实际尾帧，请求记录父素材 ID；重排使可修改的后续片段一起失效。视频、M3、语音共用 PostgreSQL 原子预算，调用前预占，结果不明不释放。停止后继续对账已知任务，无任务编号通过控制台绑定。
+
+Director 连续会话应使用独立契约，复用导演、世界状态与输出边界，不伪装成短片队列 API。本阶段未引入实验性 WebRTC 会话。

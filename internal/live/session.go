@@ -26,14 +26,15 @@ type StreamState struct {
 }
 
 type LiveSession struct {
-	ID        SessionID     `json:"id"`
-	Status    SessionStatus `json:"status"`
-	World     WorldState    `json:"world"`
-	Timeline  Timeline      `json:"timeline"`
-	Stream    StreamState   `json:"stream"`
-	Version   int64         `json:"version"`
-	CreatedAt time.Time     `json:"createdAt"`
-	UpdatedAt time.Time     `json:"updatedAt"`
+	Profile   *CharacterProfile `json:"profile,omitempty"`
+	ID        SessionID         `json:"id"`
+	Status    SessionStatus     `json:"status"`
+	World     WorldState        `json:"world"`
+	Timeline  Timeline          `json:"timeline"`
+	Stream    StreamState       `json:"stream"`
+	Version   int64             `json:"version"`
+	CreatedAt time.Time         `json:"createdAt"`
+	UpdatedAt time.Time         `json:"updatedAt"`
 }
 
 func NewSession(id SessionID, world WorldState, timeline Timeline, now time.Time) (LiveSession, error) {

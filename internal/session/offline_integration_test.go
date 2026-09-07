@@ -1,30 +1,35 @@
+//go:build integration || soak
+
 package session_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
-	"streaming-agent/internal/adapter/out/ffmpeg"
-	postgresstore "streaming-agent/internal/adapter/out/storage/postgres"
 	"streaming-agent/internal/director"
 	"streaming-agent/internal/generation"
 	"streaming-agent/internal/live"
 	"streaming-agent/internal/monitoring"
 	"streaming-agent/internal/session"
+	postgresstore "streaming-agent/internal/store"
+	"streaming-agent/internal/streaming/ffmpeg"
 )
 
-func TestOfflinePostgresFFmpegSoak(t *testing.T) {
+func TestOfflinePostgresFFmpeg(t *testing.T) {
+	runOfflinePipeline(t, 5*time.Second)
+}
+
+func runOfflinePipeline(t *testing.T, duration time.Duration) {
+	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	durationText := os.Getenv("OFFLINE_SOAK_DURATION")
-	if databaseURL == "" || durationText == "" {
-		t.Skip("TEST_DATABASE_URL and OFFLINE_SOAK_DURATION are required")
-	}
-	duration, err := time.ParseDuration(durationText)
-	if err != nil {
-		t.Fatal(err)
+	if databaseURL == "" {
+		t.Fatal("TEST_DATABASE_URL is required")
 	}
 	ctx := context.Background()
 	store, err := postgresstore.Open(ctx, databaseURL)
@@ -95,6 +100,7 @@ func TestOfflinePostgresFFmpegSoak(t *testing.T) {
 	if info.Size() == 0 {
 		t.Fatal("local FLV is empty")
 	}
+	assertStreamContinuity(t, outputPath, duration)
 }
 
 func waitForSnapshot(t *testing.T, hub *monitoring.Hub, timeout time.Duration, ready func(monitoring.Snapshot) bool) monitoring.Snapshot {
@@ -143,3 +149,42 @@ func (g *soakGenerator) Result(_ context.Context, id string) (generation.Result,
 	return generation.Result{JobID: id, AssetURL: path}, nil
 }
 func (*soakGenerator) Cancel(context.Context, string) error { return nil }
+
+func assertStreamContinuity(t *testing.T, path string, duration time.Duration) {
+	t.Helper()
+	output, err := exec.Command("ffprobe", "-v", "error", "-show_packets", "-show_entries", "packet=codec_type,dts_time", "-of", "json", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var probe struct {
+		Packets []struct {
+			Codec string `json:"codec_type"`
+			DTS   string `json:"dts_time"`
+		} `json:"packets"`
+	}
+	if err := json.Unmarshal(output, &probe); err != nil {
+		t.Fatal(err)
+	}
+	first, last := map[string]float64{}, map[string]float64{}
+	for _, packet := range probe.Packets {
+		timestamp, err := strconv.ParseFloat(packet.DTS, 64)
+		if err != nil {
+			t.Fatalf("invalid %s DTS %q: %v", packet.Codec, packet.DTS, err)
+		}
+		previous, exists := last[packet.Codec]
+		if exists && (timestamp <= previous || timestamp-previous > 0.25) {
+			t.Fatalf("%s DTS discontinuity: %.3f -> %.3f", packet.Codec, previous, timestamp)
+		}
+		if !exists {
+			first[packet.Codec] = timestamp
+		}
+		last[packet.Codec] = timestamp
+	}
+	for _, codec := range []string{"video", "audio"} {
+		end, exists := last[codec]
+		if !exists || end-first[codec] < duration.Seconds() {
+			t.Fatalf("%s stream duration %.3fs is shorter than %s", codec, end-first[codec], duration)
+		}
+	}
+	t.Logf("continuous media: video=%.3fs audio=%.3fs", last["video"]-first["video"], last["audio"]-first["audio"])
+}

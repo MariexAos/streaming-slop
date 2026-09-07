@@ -40,7 +40,7 @@ export function SessionHistoryDashboard() {
         <h2 className="section-title">直播记录与 Flow 回放</h2>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
+        <p role="alert" className="text-sm text-rose-600">
           {error}
         </p>
       )}
