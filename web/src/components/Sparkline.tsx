@@ -1,6 +1,12 @@
 import type { MetricPoint } from "@/store/ops"
 
-export function Sparkline({ points, tone = "accent" }: { points: MetricPoint[]; tone?: "accent" | "warm" }) {
+export function Sparkline({
+  points,
+  tone = "accent",
+}: {
+  points: MetricPoint[]
+  tone?: "accent" | "warm"
+}) {
   const values = points.flatMap((point, index) =>
     point.value === null ? [] : [{ x: index, value: point.value }],
   )
@@ -22,8 +28,19 @@ export function Sparkline({ points, tone = "accent" }: { points: MetricPoint[]; 
     .join(" ")
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-10 w-full" preserveAspectRatio="none" aria-hidden="true">
-      <path d={path} fill="none" stroke={tone === "warm" ? "var(--warm)" : "var(--accent)"} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="h-10 w-full"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke={tone === "warm" ? "var(--warm)" : "var(--accent)"}
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   )
 }

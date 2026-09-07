@@ -13,40 +13,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
+  frontend-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        with:
+          version: 0.3.0
+          node-version: 24
+          working-directory: web
+          cache: true
+          run-install: false
+      - name: Install frontend dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Check, test and build frontend
+        working-directory: web
+        run: vp run quality
+      - uses: actions/upload-artifact@v4
+        with:
+          name: embedded-frontend
+          path: internal/adapter/in/webui/dist
+          if-no-files-found: error
+
+  frontend-browser:
+    needs: frontend-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        with:
+          version: 0.3.0
+          node-version: 24
+          working-directory: web
+          cache: true
+          run-install: false
+      - name: Install frontend dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: embedded-frontend
+          path: internal/adapter/in/webui/dist
+      - name: Install Chromium
+        working-directory: web
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test console interactions
+        working-directory: web
+        run: pnpm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failure
+          path: |
+            web/playwright-report
+            web/test-results
+          retention-days: 7
+
+  backend-quality:
+    needs: frontend-quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-
-      - uses: actions/setup-node@v7
+      - uses: actions/download-artifact@v4
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
+          name: embedded-frontend
+          path: internal/adapter/in/webui/dist
       - name: Verify Go module
         run: |
           go mod tidy -diff
           go mod verify
-
-      - name: Install frontend dependencies
-        working-directory: web
-        run: npm ci
-
-      - name: Test frontend
-        working-directory: web
-        run: npm test
-
-      - name: Build embedded frontend
-        working-directory: web
-        run: npm run build
-
       - name: Check Go file sizes
         run: make file-size
 

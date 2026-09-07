@@ -14,7 +14,9 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex items-start justify-between gap-4 p-5 pb-0", className)} {...props} />
+  return (
+    <div className={cn("flex items-start justify-between gap-4 p-5 pb-0", className)} {...props} />
+  )
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {

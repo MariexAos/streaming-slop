@@ -1,7 +1,7 @@
 SHELL := /bin/sh
 
 GO ?= go
-NPM ?= npm
+PNPM ?= pnpm
 GOLANGCI_LINT ?= golangci-lint
 GOVULNCHECK ?= $(GO) run golang.org/x/vuln/cmd/govulncheck@v1.7.0
 BIN_DIR ?= $(CURDIR)/bin
@@ -11,7 +11,7 @@ GO_FILE_MAX_LINES ?= 500
 RUNTIME_FILE_MAX_LINES := 1220
 POSTGRES_STORE_FILE_MAX_LINES := 854
 
-.PHONY: format config-check format-check file-size lint lint-quality test test-race coverage vuln web-install web-test web-build build-go build check run
+.PHONY: format config-check format-check file-size lint lint-quality test test-race coverage vuln web-install web-lint web-quality web-e2e web-test web-build build-go build check run
 
 format:
 	$(GOLANGCI_LINT) fmt
@@ -61,13 +61,22 @@ vuln:
 	$(GOVULNCHECK) ./...
 
 web-install:
-	cd web && $(NPM) ci
+	cd web && $(PNPM) install --frozen-lockfile
 
 web-test:
-	cd web && $(NPM) test
+	cd web && $(PNPM) test
+
+web-lint:
+	cd web && $(PNPM) exec vp check && $(PNPM) run lint:arch && $(PNPM) exec knip
+
+web-quality:
+	cd web && $(PNPM) run quality
+
+web-e2e: web-build
+	cd web && $(PNPM) run test:e2e
 
 web-build:
-	cd web && $(NPM) run build
+	cd web && $(PNPM) run build
 
 build-go:
 	mkdir -p "$(BIN_DIR)"
@@ -75,7 +84,7 @@ build-go:
 
 build: web-build build-go
 
-check: config-check format-check file-size lint test-race web-test build
+check: config-check format-check file-size lint test-race web-lint web-test build
 
 run: build
 	"$(APP)"

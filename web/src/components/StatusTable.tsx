@@ -11,10 +11,17 @@ export type StatusRow = {
 export function StatusTable({ title, rows }: { title: string; rows: StatusRow[] }) {
   return (
     <Card>
-      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
       <CardContent className="pt-3">
         <Table>
-          <thead><TableRow><TableHead>指标</TableHead><TableHead className="text-right">当前值</TableHead></TableRow></thead>
+          <thead>
+            <TableRow>
+              <TableHead>指标</TableHead>
+              <TableHead className="text-right">当前值</TableHead>
+            </TableRow>
+          </thead>
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.label}>

@@ -5,3 +5,7 @@
 /web/node_modules/
 /web/*.tsbuildinfo
 .DS_Store
+
+/web/.vite/
+/web/test-results/
+/web/playwright-report/

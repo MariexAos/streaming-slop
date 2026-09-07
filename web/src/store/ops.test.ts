@@ -1,11 +1,17 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it } from "vite-plus/test"
 import { opsSnapshotSchema } from "@/lib/schema"
-import { snapshotFixture } from "@/lib/schema.test"
+import { snapshotFixture } from "@/lib/snapshot.fixture"
 import { emptyHistory, useOpsStore } from "@/store/ops"
 
 describe("ops store", () => {
   beforeEach(() => {
-    useOpsStore.setState({ snapshot: null, history: emptyHistory, commandError: null, commandMessage: null, dataError: null })
+    useOpsStore.setState({
+      snapshot: null,
+      history: emptyHistory,
+      commandError: null,
+      commandMessage: null,
+      dataError: null,
+    })
   })
 
   it("ignores stale revisions", () => {

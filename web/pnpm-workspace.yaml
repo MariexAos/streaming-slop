@@ -1,0 +1,12 @@
+packages:
+  - .
+overrides:
+  vite: npm:@voidzero-dev/vite-plus-core@0.3.0
+  vitest: 4.1.11
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+# The Vite+ core alias exposes its release version, while bundling Vite 8.2.2.
+peerDependencyRules:
+  allowedVersions:
+    vite: "0.3.0"

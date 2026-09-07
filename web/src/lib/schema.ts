@@ -4,7 +4,7 @@ const nullableText = z.string().nullable()
 const nullableNumber = z.number().finite().nullable()
 const nonNegative = z.number().finite().nonnegative()
 
-export const sessionStatusSchema = z.enum([
+const sessionStatusSchema = z.enum([
   "stopped",
   "starting",
   "buffering",
@@ -14,7 +14,7 @@ export const sessionStatusSchema = z.enum([
   "failed",
 ])
 
-export const segmentStatusSchema = z.enum([
+const segmentStatusSchema = z.enum([
   "planned",
   "generating",
   "ready",
@@ -23,21 +23,9 @@ export const segmentStatusSchema = z.enum([
   "played",
 ])
 
-export const generationModeSchema = z.enum([
-  "normal",
-  "high",
-  "critical",
-  "fallback",
-  "pause",
-])
+const generationModeSchema = z.enum(["normal", "high", "critical", "fallback", "pause"])
 
-export const streamStatusSchema = z.enum([
-  "stopped",
-  "starting",
-  "live",
-  "recovering",
-  "failed",
-])
+const streamStatusSchema = z.enum(["stopped", "starting", "live", "recovering", "failed"])
 
 export const opsSnapshotSchema = z
   .object({
@@ -168,89 +156,155 @@ export const qwenConfigSchema = z
   .strict()
 
 const flowNodeStatusSchema = z.enum(["pending", "running", "completed", "failed", "skipped"])
-const generationModeNameSchema = z.enum(["text_to_video", "first_frame_to_video", "first_last_frame_to_video"])
+const generationModeNameSchema = z.enum([
+  "text_to_video",
+  "first_frame_to_video",
+  "first_last_frame_to_video",
+])
 
-export const flowCatalogSchema = z.object({
-  flows: z.array(z.object({
+export const flowCatalogSchema = z
+  .object({
+    flows: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          name: z.string().min(1),
+          version: z.string().min(1),
+          enabled: z.boolean(),
+          kind: z.enum(["primary", "modifier"]),
+          description: z.string(),
+          nodes: z.array(
+            z
+              .object({ id: z.string().min(1), type: z.string().min(1), label: z.string().min(1) })
+              .strict(),
+          ),
+          edges: z.array(z.object({ from: z.string().min(1), to: z.string().min(1) }).strict()),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+
+export const currentFlowSchema = z
+  .object({
+    flowId: z.string().min(1),
+    status: z.enum(["idle", "running", "completed", "failed"]),
+    startedAt: z.string().datetime({ offset: true }).nullable(),
+    direction: z
+      .object({
+        currentLabel: z.string(),
+        targetLabel: z.string(),
+        summary: z.string(),
+        horizonSeconds: z.literal(60),
+        effectiveInSeconds: nonNegative,
+        axes: z.array(
+          z
+            .object({
+              name: z.string().min(1),
+              current: z.number().min(0).max(100),
+              target: z.number().min(0).max(100),
+            })
+            .strict(),
+        ),
+      })
+      .strict(),
+    audience: z
+      .object({
+        windowSeconds: nonNegative,
+        messageCount: z.number().int().nonnegative(),
+        summary: z.string(),
+        intents: z.array(
+          z.object({ label: z.string().min(1), support: z.number().min(0).max(1) }).strict(),
+        ),
+      })
+      .strict(),
+    nodes: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          status: flowNodeStatusSchema,
+          durationMs: nullableNumber,
+          summary: z.string(),
+          costCny: nullableNumber,
+        })
+        .strict(),
+    ),
+    beats: z.array(
+      z
+        .object({
+          index: z.number().int().nonnegative(),
+          startSeconds: nonNegative,
+          endSeconds: nonNegative,
+          intent: z.string().min(1),
+          mode: generationModeNameSchema,
+          anchorFrame: nullableText,
+          status: z.enum(["planned", "submitted", "generating", "ready", "locked"]),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+
+const historySummarySchema = z
+  .object({
     id: z.string().min(1),
-    name: z.string().min(1),
-    version: z.string().min(1),
-    enabled: z.boolean(),
-    kind: z.enum(["primary", "modifier"]),
-    description: z.string(),
-    nodes: z.array(z.object({ id: z.string().min(1), type: z.string().min(1), label: z.string().min(1) }).strict()),
-    edges: z.array(z.object({ from: z.string().min(1), to: z.string().min(1) }).strict()),
-  }).strict()),
-}).strict()
+    status: z.string().min(1),
+    startedAt: z.string().datetime({ offset: true }),
+    endedAt: z.string().datetime({ offset: true }),
+    segmentTotal: z.number().int().nonnegative(),
+    readyTotal: z.number().int().nonnegative(),
+    costCny: nonNegative,
+  })
+  .strict()
 
-export const currentFlowSchema = z.object({
-  flowId: z.string().min(1),
-  status: z.enum(["idle", "running", "completed", "failed"]),
-  startedAt: z.string().datetime({ offset: true }).nullable(),
-  direction: z.object({
-    currentLabel: z.string(),
-    targetLabel: z.string(),
-    summary: z.string(),
-    horizonSeconds: z.literal(60),
-    effectiveInSeconds: nonNegative,
-    axes: z.array(z.object({ name: z.string().min(1), current: z.number().min(0).max(100), target: z.number().min(0).max(100) }).strict()),
-  }).strict(),
-  audience: z.object({
-    windowSeconds: nonNegative,
-    messageCount: z.number().int().nonnegative(),
-    summary: z.string(),
-    intents: z.array(z.object({ label: z.string().min(1), support: z.number().min(0).max(1) }).strict()),
-  }).strict(),
-  nodes: z.array(z.object({
-    id: z.string().min(1),
-    status: flowNodeStatusSchema,
-    durationMs: nullableNumber,
-    summary: z.string(),
-    costCny: nullableNumber,
-  }).strict()),
-  beats: z.array(z.object({
-    index: z.number().int().nonnegative(),
-    startSeconds: nonNegative,
-    endSeconds: nonNegative,
-    intent: z.string().min(1),
-    mode: generationModeNameSchema,
-    anchorFrame: nullableText,
-    status: z.enum(["planned", "submitted", "generating", "ready", "locked"]),
-  }).strict()),
-}).strict()
+const historyDirectionSchema = z
+  .object({
+    action: z.string(),
+    dialogue: z.string(),
+    emotion: z.string(),
+    camera: z.object({ shot: z.string(), movement: z.string(), angle: z.string() }).strict(),
+    continuity: z.object({ notes: z.string(), anchors: z.array(z.string()).optional() }).strict(),
+  })
+  .strict()
 
-const historySummarySchema = z.object({
-  id: z.string().min(1),
-  status: z.string().min(1),
-  startedAt: z.string().datetime({ offset: true }),
-  endedAt: z.string().datetime({ offset: true }),
-  segmentTotal: z.number().int().nonnegative(),
-  readyTotal: z.number().int().nonnegative(),
-  costCny: nonNegative,
-}).strict()
-
-const historyDirectionSchema = z.object({
-  action: z.string(), dialogue: z.string(), emotion: z.string(),
-  camera: z.object({ shot: z.string(), movement: z.string(), angle: z.string() }).strict(),
-  continuity: z.object({ notes: z.string(), anchors: z.array(z.string()).optional() }).strict(),
-}).strict()
-
-export const sessionHistoryListSchema = z.object({ sessions: z.array(historySummarySchema) }).strict()
-export const sessionHistorySchema = z.object({
-  session: historySummarySchema,
-  segments: z.array(z.object({
-    id: z.string().min(1), sequence: z.number().int().nonnegative(), startSeconds: nonNegative,
-    endSeconds: nonNegative, status: z.string().min(1), direction: historyDirectionSchema, playable: z.boolean(),
-  }).strict()),
-  observerRuns: z.array(z.object({
-    revision: z.number().int().nonnegative(), messages: z.array(z.string()),
-    observation: z.object({
-      summary: z.string(), mood: z.string(),
-      intents: z.array(z.object({ label: z.string(), support: z.number() }).strict()),
-    }).strict(),
-    error: nullableText, createdAt: z.string().datetime({ offset: true }),
-  }).strict()),
-}).strict()
+export const sessionHistoryListSchema = z
+  .object({ sessions: z.array(historySummarySchema) })
+  .strict()
+export const sessionHistorySchema = z
+  .object({
+    session: historySummarySchema,
+    segments: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          sequence: z.number().int().nonnegative(),
+          startSeconds: nonNegative,
+          endSeconds: nonNegative,
+          status: z.string().min(1),
+          direction: historyDirectionSchema,
+          playable: z.boolean(),
+        })
+        .strict(),
+    ),
+    observerRuns: z.array(
+      z
+        .object({
+          revision: z.number().int().nonnegative(),
+          messages: z.array(z.string()),
+          observation: z
+            .object({
+              summary: z.string(),
+              mood: z.string(),
+              intents: z.array(z.object({ label: z.string(), support: z.number() }).strict()),
+            })
+            .strict(),
+          error: nullableText,
+          createdAt: z.string().datetime({ offset: true }),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
 
 export type OpsSnapshot = z.infer<typeof opsSnapshotSchema>
 export type CommandResponse = z.infer<typeof commandResponseSchema>

@@ -36,8 +36,14 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
           <p className="mt-1 text-xs text-[var(--text-muted)]">从当前播放点开始的未来 90 秒</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge tone="success"><CirclePlay className="size-3" aria-hidden="true" />播放点 {Math.floor(start)}秒</Badge>
-          <Badge tone="accent"><ShieldCheck className="size-3" aria-hidden="true" />提交边界 +{snapshot.buffer.commitHorizonSeconds}秒</Badge>
+          <Badge tone="success">
+            <CirclePlay className="size-3" aria-hidden="true" />
+            播放点 {Math.floor(start)}秒
+          </Badge>
+          <Badge tone="accent">
+            <ShieldCheck className="size-3" aria-hidden="true" />
+            提交边界 +{snapshot.buffer.commitHorizonSeconds}秒
+          </Badge>
         </div>
       </CardHeader>
       <CardContent>
@@ -45,7 +51,11 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
           <div className="min-w-[760px]">
             <div className="relative mb-2 h-6 text-[10px] font-semibold text-[var(--text-dim)]">
               {[0, 15, 30, 45, 60, 75, 90].map((tick) => (
-                <span key={tick} className="absolute -translate-x-1/2" style={{ left: `${(tick / 90) * 100}%` }}>
+                <span
+                  key={tick}
+                  className="absolute -translate-x-1/2"
+                  style={{ left: `${(tick / 90) * 100}%` }}
+                >
                   +{tick}s
                 </span>
               ))}
@@ -61,7 +71,11 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
                 </span>
               </div>
               {[15, 30, 45, 60, 75].map((tick) => (
-                <div key={tick} className="absolute inset-y-0 border-l border-[var(--line)]" style={{ left: `${(tick / 90) * 100}%` }} />
+                <div
+                  key={tick}
+                  className="absolute inset-y-0 border-l border-[var(--line)]"
+                  style={{ left: `${(tick / 90) * 100}%` }}
+                />
               ))}
               <ol className="absolute inset-x-0 bottom-3 top-9 list-none">
                 {segments.map((segment) => {
@@ -76,15 +90,25 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
                       style={{ left: `${left}%`, width: `calc(${width}% - 2px)` }}
                       title={`片段 ${segment.sequence}：${segmentLabel(segment.status)}，${sourceLabel(segment.source)}`}
                     >
-                      <span className="block truncate font-mono text-[10px] font-bold text-[var(--text)]">#{segment.sequence}</span>
-                      <span className="mt-1 block truncate text-[9px] uppercase tracking-wide text-[var(--text-muted)]">{segmentLabel(segment.status)}</span>
-                      {segment.source === "fallback" && <span className="mt-1 block text-[9px] font-bold text-amber-600 dark:text-amber-300">备用</span>}
+                      <span className="block truncate font-mono text-[10px] font-bold text-[var(--text)]">
+                        #{segment.sequence}
+                      </span>
+                      <span className="mt-1 block truncate text-[9px] uppercase tracking-wide text-[var(--text-muted)]">
+                        {segmentLabel(segment.status)}
+                      </span>
+                      {segment.source === "fallback" && (
+                        <span className="mt-1 block text-[9px] font-bold text-amber-600 dark:text-amber-300">
+                          备用
+                        </span>
+                      )}
                     </li>
                   )
                 })}
               </ol>
               {segments.length === 0 && (
-                <div className="absolute inset-0 grid place-items-center text-sm text-[var(--text-muted)]">当前窗口内没有片段</div>
+                <div className="absolute inset-0 grid place-items-center text-sm text-[var(--text-muted)]">
+                  当前窗口内没有片段
+                </div>
               )}
             </div>
           </div>
@@ -95,7 +119,18 @@ export function Timeline({ snapshot }: { snapshot: OpsSnapshot }) {
 }
 
 function segmentLabel(status: string) {
-  return ({ planned: "已规划", generating: "生成中", ready: "已就绪", committed: "已提交", playing: "播放中", played: "已播放" } as Record<string, string>)[status] ?? status
+  return (
+    (
+      {
+        planned: "已规划",
+        generating: "生成中",
+        ready: "已就绪",
+        committed: "已提交",
+        playing: "播放中",
+        played: "已播放",
+      } as Record<string, string>
+    )[status] ?? status
+  )
 }
 
 function sourceLabel(source: string) {

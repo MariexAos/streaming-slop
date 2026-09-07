@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { sendCommand, type OpsCommand } from "@/lib/api"
 import type { OpsSnapshot } from "@/lib/schema"
 
-export type ConnectionState = "connecting" | "open" | "reconnecting" | "closed"
+type ConnectionState = "connecting" | "open" | "reconnecting" | "closed"
 
 export type MetricPoint = {
   observedAt: string
@@ -67,10 +67,7 @@ export const useOpsStore = create<OpsStore>((set, get) => ({
       history: {
         ready: append(state.history.ready, point(snapshot.buffer.readySeconds)),
         submitted: append(state.history.submitted, point(snapshot.buffer.submittedSeconds)),
-        latencyP95: append(
-          state.history.latencyP95,
-          point(snapshot.generation.latencyP95Seconds),
-        ),
+        latencyP95: append(state.history.latencyP95, point(snapshot.generation.latencyP95Seconds)),
         bitrate: append(state.history.bitrate, point(snapshot.stream.bitrateKbps)),
         cost: append(state.history.cost, point(snapshot.generation.costCny)),
       },
@@ -96,5 +93,14 @@ export const useOpsStore = create<OpsStore>((set, get) => ({
 }))
 
 function commandLabel(command: string) {
-  return ({ start: "启动", stop: "停止", fallback: "备用画面", "force-fallback": "强制备用画面" } as Record<string, string>)[command] ?? command
+  return (
+    (
+      {
+        start: "启动",
+        stop: "停止",
+        fallback: "备用画面",
+        "force-fallback": "强制备用画面",
+      } as Record<string, string>
+    )[command] ?? command
+  )
 }

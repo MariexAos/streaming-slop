@@ -1,12 +1,17 @@
 {
   "name": "streaming-agent-ops",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "dev": "vp dev",
+    "check": "vp check",
+    "lint": "vp lint --max-warnings 0",
+    "lint:arch": "depcruise src --config .dependency-cruiser.cjs",
+    "build": "vp build",
+    "test": "vp test run",
+    "test:e2e": "playwright test",
+    "quality": "vp check && vp run lint:arch && knip && vp test run && vp build"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.0",
@@ -18,13 +23,22 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^6.1.0",
+    "dependency-cruiser": "^18.2.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "knip": "^6.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
-    "vite": "^7.0.0",
-    "vitest": "^3.2.0"
-  }
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
+    "vite-plus": "0.3.0"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@11.19.0"
 }
