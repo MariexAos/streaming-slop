@@ -1,0 +1,51 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - cyclop
+    - depguard
+    - durationcheck
+    - errcheck
+    - errorlint
+    - funlen
+    - gocognit
+    - govet
+    - ineffassign
+    - maintidx
+    - nestif
+    - nilerr
+    - nolintlint
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - unused
+  settings:
+    depguard:
+      rules:
+        live-standard-library-only:
+          files:
+            - "**/internal/live/*.go"
+          allow:
+            - $gostd
+  exclusions:
+    generated: strict
+    rules:
+      - path: _test\.go
+        linters:
+          - cyclop
+          - funlen
+          - gocognit
+          - maintidx
+          - nestif
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

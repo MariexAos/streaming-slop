@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --background: #eef3f7;
+  --panel: color-mix(in srgb, white 88%, transparent);
+  --panel-solid: #ffffff;
+  --surface-raised: #f3f7fa;
+  --surface-hover: #e8f0f4;
+  --timeline: #e7eef3;
+  --track: #dbe5eb;
+  --line: #d4dfe6;
+  --line-strong: #bdcbd5;
+  --text: #102030;
+  --text-muted: #5e7180;
+  --text-dim: #7c8d99;
+  --accent: #00a6b7;
+  --brand: linear-gradient(145deg, #77f3e5, #20bdd0);
+  --warm: #d97706;
+  --danger: #dc3651;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #07111f;
+    --panel: color-mix(in srgb, #0d1b2b 90%, transparent);
+    --panel-solid: #0d1b2b;
+    --surface-raised: #132438;
+    --surface-hover: #1a3047;
+    --timeline: #0a1726;
+    --track: #1a3044;
+    --line: #1d3448;
+    --line-strong: #2a455b;
+    --text: #e9f4f7;
+    --text-muted: #91a8b5;
+    --text-dim: #698291;
+    --accent: #4fe0df;
+    --brand: linear-gradient(145deg, #92fff0, #35c8dc);
+    --warm: #f8ad4a;
+    --danger: #e94d69;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 28rem),
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--warm) 8%, transparent), transparent 24rem),
+    var(--background);
+  color: var(--text);
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.2rem;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+}
+
+.status-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

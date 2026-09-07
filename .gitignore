@@ -1,0 +1,7 @@
+/.artifacts/
+/bin/
+/data/
+/live
+/web/node_modules/
+/web/*.tsbuildinfo
+.DS_Store
