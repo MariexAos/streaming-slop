@@ -62,27 +62,17 @@ export function GenerationConfigPanel({
   onSaveQwen: (value: { baseUrl: string; apiKey?: string }) => Promise<boolean>
 }) {
   const [apiKey, setAPIKey] = useState("")
-  const [roomId, setRoomId] = useState(bilibiliConfig?.roomId ? String(bilibiliConfig.roomId) : "")
+  const [roomDraft, setRoomId] = useState<string>()
+  const roomId = roomDraft ?? (bilibiliConfig?.roomId ? String(bilibiliConfig.roomId) : "")
   const [cookie, setCookie] = useState("")
   const [mockUsername, setMockUsername] = useState("本地观众")
   const [mockText, setMockText] = useState("")
-  const [qwenBaseURL, setQwenBaseURL] = useState(qwenConfig?.baseUrl ?? "")
+  const [baseDraft, setQwenBaseURL] = useState<string>()
+  const qwenBaseURL = baseDraft ?? qwenConfig?.baseUrl ?? ""
   const [qwenAPIKey, setQwenAPIKey] = useState("")
 
-  const [previousRoomId, setPreviousRoomId] = useState(bilibiliConfig?.roomId)
-  const [previousBaseURL, setPreviousBaseURL] = useState(qwenConfig?.baseUrl)
-
-  if (bilibiliConfig?.roomId !== previousRoomId) {
-    setPreviousRoomId(bilibiliConfig?.roomId)
-    if (bilibiliConfig?.roomId) setRoomId(String(bilibiliConfig.roomId))
-  }
-
-  if (qwenConfig?.baseUrl !== previousBaseURL) {
-    setPreviousBaseURL(qwenConfig?.baseUrl)
-    if (qwenConfig?.baseUrl) setQwenBaseURL(qwenConfig.baseUrl)
-  }
-
-  if (!config) return <p className="text-sm text-[var(--text-muted)]">正在加载生成配置…</p>
+  if (!config)
+    return <p className="text-sm text-[var(--text-muted)]">{error ?? "正在加载生成配置…"}</p>
 
   const save = async () => {
     const value = apiKey.trim()

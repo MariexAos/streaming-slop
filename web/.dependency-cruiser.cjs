@@ -12,12 +12,18 @@ module.exports = {
       name: "lib-does-not-depend-on-ui-or-store",
       severity: "error",
       from: { path: "^src/lib/" },
-      to: { path: "^src/(components/|store/|App\\.tsx$|main\\.tsx$)" },
+      to: { path: "^src/(components/|store/|queries/|App\\.tsx$|main\\.tsx$)" },
     },
     {
-      name: "store-does-not-depend-on-ui",
+      name: "store-does-not-depend-on-ui-or-queries",
       severity: "error",
       from: { path: "^src/store/" },
+      to: { path: "^src/(components/|queries/|App\\.tsx$|main\\.tsx$)" },
+    },
+    {
+      name: "queries-do-not-depend-on-ui",
+      severity: "error",
+      from: { path: "^src/queries/" },
       to: { path: "^src/(components/|App\\.tsx$|main\\.tsx$)" },
     },
     {

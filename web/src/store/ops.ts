@@ -1,5 +1,4 @@
 import { create } from "zustand"
-import { sendCommand, type OpsCommand } from "@/lib/api"
 import type { OpsSnapshot } from "@/lib/schema"
 
 type ConnectionState = "connecting" | "open" | "reconnecting" | "closed"
@@ -18,17 +17,13 @@ type MetricHistory = {
 }
 
 type OpsStore = {
-  snapshot: OpsSnapshot | null
+  revision: number
   connection: ConnectionState
-  pendingCommand: OpsCommand | null
-  commandError: string | null
-  commandMessage: string | null
   dataError: string | null
   history: MetricHistory
   applySnapshot: (snapshot: OpsSnapshot) => void
   setConnection: (connection: ConnectionState) => void
   setDataError: (message: string | null) => void
-  runCommand: (command: OpsCommand) => Promise<void>
 }
 
 const HISTORY_LIMIT = 120
@@ -46,23 +41,19 @@ function append(points: MetricPoint[], point: MetricPoint) {
 }
 
 export const useOpsStore = create<OpsStore>((set, get) => ({
-  snapshot: null,
+  revision: -1,
   connection: "connecting",
-  pendingCommand: null,
-  commandError: null,
-  commandMessage: null,
   dataError: null,
   history: emptyHistory,
   applySnapshot: (snapshot) => {
-    const current = get().snapshot
-    if (current && snapshot.revision <= current.revision) return
+    if (snapshot.revision <= get().revision) return
 
     const point = (value: number | null): MetricPoint => ({
       observedAt: snapshot.observedAt,
       value,
     })
     set((state) => ({
-      snapshot,
+      revision: snapshot.revision,
       dataError: null,
       history: {
         ready: append(state.history.ready, point(snapshot.buffer.readySeconds)),
@@ -75,32 +66,4 @@ export const useOpsStore = create<OpsStore>((set, get) => ({
   },
   setConnection: (connection) => set({ connection }),
   setDataError: (dataError) => set({ dataError }),
-  runCommand: async (command) => {
-    set({ pendingCommand: command, commandError: null, commandMessage: null })
-    try {
-      const response = await sendCommand(command)
-      set({
-        pendingCommand: null,
-        commandMessage: `命令已接受：${commandLabel(response.command)}`,
-      })
-    } catch (error) {
-      set({
-        pendingCommand: null,
-        commandError: error instanceof Error ? error.message : "命令执行失败。",
-      })
-    }
-  },
 }))
-
-function commandLabel(command: string) {
-  return (
-    (
-      {
-        start: "启动",
-        stop: "停止",
-        fallback: "备用画面",
-        "force-fallback": "强制备用画面",
-      } as Record<string, string>
-    )[command] ?? command
-  )
-}

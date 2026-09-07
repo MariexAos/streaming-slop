@@ -1,43 +1,31 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Clapperboard, Eye, History, MessageCircleMore, Play } from "lucide-react"
 import { fetchSessionHistory, fetchSessionHistoryList } from "@/lib/api"
-import type { SessionHistory, SessionHistorySummary } from "@/lib/schema"
+import { skipToken, useQuery } from "@tanstack/react-query"
 import { formatNumber } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function SessionHistoryDashboard() {
-  const [sessions, setSessions] = useState<SessionHistorySummary[]>([])
-  const [selectedID, setSelectedID] = useState<string | null>(null)
-  const [loadedDetail, setDetail] = useState<SessionHistory | null>(null)
-  const detail = loadedDetail?.session.id === selectedID ? loadedDetail : null
-  const [segmentID, setSegmentID] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void fetchSessionHistoryList(controller.signal)
-      .then((items) => {
-        setSessions(items)
-        setSelectedID((current) => current ?? items[0]?.id ?? null)
-      })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "无法读取直播记录。"))
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    if (!selectedID) return
-    const controller = new AbortController()
-    void fetchSessionHistory(selectedID, controller.signal)
-      .then((value) => {
-        setDetail(value)
-        setSegmentID(value.segments.find((segment) => segment.playable)?.id ?? null)
-        setError(null)
-      })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "无法读取直播详情。"))
-    return () => controller.abort()
-  }, [selectedID])
-
+  const list = useQuery({
+    queryKey: ["sessions"],
+    queryFn: ({ signal }) => fetchSessionHistoryList(signal),
+  })
+  const sessions = list.data ?? []
+  const [selection, setSelectedID] = useState<string | null>(null)
+  const selectedID = selection ?? sessions[0]?.id ?? null
+  const history = useQuery({
+    queryKey: ["sessions", selectedID],
+    queryFn: selectedID ? ({ signal }) => fetchSessionHistory(selectedID, signal) : skipToken,
+  })
+  const detail = history.data
+  const [segmentSelection, setSegmentSelection] = useState<{ session: string | null; id: string }>()
+  const segmentID =
+    segmentSelection?.session === selectedID
+      ? segmentSelection.id
+      : detail?.segments.find((segment) => segment.playable)?.id
+  const setSegmentID = (id: string) => setSegmentSelection({ session: selectedID, id })
+  const error = (list.error ?? history.error)?.message
   const playableSegments = detail?.segments.filter((segment) => segment.playable) ?? []
   const selectedSegment = playableSegments.find((segment) => segment.id === segmentID) ?? null
   const playNext = () => {

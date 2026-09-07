@@ -160,3 +160,28 @@ test("does not show previous session details while switching", async ({ page }) 
   finish?.()
   await expect(page.getByText("观察-second", { exact: true })).toBeVisible()
 })
+
+test("configuration failure does not block live operations", async ({ page }) => {
+  await page.route("**/config/generation", (route) =>
+    route.fulfill({ status: 503, json: { code: "offline", message: "生成配置暂不可用" } }),
+  )
+  await page.goto("/")
+  await expect(page.getByRole("heading", { name: "直播生成控制台" })).toBeVisible()
+  await page.getByRole("button", { name: "配置", exact: true }).click()
+  await expect(page.getByText("生成配置暂不可用", { exact: true })).toBeVisible()
+})
+
+test("background room refresh preserves an edited draft", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "配置", exact: true }).click()
+  const room = page.getByLabel("直播间房间号")
+  await expect(room).toHaveValue("123")
+  await room.fill("789")
+  await page.route("**/config/bilibili", (route) =>
+    route.fulfill({
+      json: { roomId: 456, cookieConfigured: true, status: "connected", lastError: null },
+    }),
+  )
+  await page.waitForResponse("**/config/bilibili")
+  await expect(room).toHaveValue("789")
+})

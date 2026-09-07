@@ -6,10 +6,8 @@ import { emptyHistory, useOpsStore } from "@/store/ops"
 describe("ops store", () => {
   beforeEach(() => {
     useOpsStore.setState({
-      snapshot: null,
+      revision: -1,
       history: emptyHistory,
-      commandError: null,
-      commandMessage: null,
       dataError: null,
     })
   })
@@ -17,7 +15,7 @@ describe("ops store", () => {
   it("ignores stale revisions", () => {
     useOpsStore.getState().applySnapshot(opsSnapshotSchema.parse(snapshotFixture(2)))
     useOpsStore.getState().applySnapshot(opsSnapshotSchema.parse(snapshotFixture(1)))
-    expect(useOpsStore.getState().snapshot?.revision).toBe(2)
+    expect(useOpsStore.getState().revision).toBe(2)
     expect(useOpsStore.getState().history.ready).toHaveLength(1)
   })
 
