@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react"
 import {
   Activity,
   AlertTriangle,
@@ -21,30 +20,11 @@ import {
   History,
   Zap,
 } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
-import {
-  fetchBilibiliConfig,
-  fetchCurrentFlow,
-  fetchFlowCatalog,
-  fetchGenerationConfig,
-  fetchQwenConfig,
-  fetchSnapshot,
-  openOpsEvents,
-  sendMockDanmaku,
-  updateBilibiliConfig,
-  updateGenerationConfig,
-  updateQwenConfig,
-  type OpsCommand,
-} from "@/lib/api"
-import type {
-  BilibiliConfig,
-  CurrentFlow,
-  FlowCatalog,
-  GenerationConfig,
-  QwenConfig,
-} from "@/lib/schema"
+import type { OpsCommand } from "@/lib/api"
 import { formatClock, formatDuration, formatNumber, formatPercent } from "@/lib/utils"
-import { useOpsStore } from "@/store/ops"
+import { useConsole } from "@/store/useConsole"
+import { NavButton, ConfirmControl, LoadingState } from "@/components/ConsoleControls"
+import { toneForStatus, statusLabel, connectionLabel, reasonLabel } from "@/lib/status"
 import { MetricCard } from "@/components/MetricCard"
 import { StatusTable, type StatusRow } from "@/components/StatusTable"
 import { Timeline } from "@/components/Timeline"
@@ -55,120 +35,36 @@ import { LiveInteractionPanel } from "@/components/LiveInteractionPanel"
 import { SessionHistoryDashboard } from "@/components/SessionHistoryDashboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 export function App() {
-  const store = useOpsStore()
-  const [view, setView] = useState<"operations" | "flow" | "history" | "cost" | "config">(
-    "operations",
-  )
-  const [generationConfig, setGenerationConfig] = useState<GenerationConfig | null>(null)
-  const [bilibiliConfig, setBilibiliConfig] = useState<BilibiliConfig | null>(null)
-  const [qwenConfig, setQwenConfig] = useState<QwenConfig | null>(null)
-  const [configSaving, setConfigSaving] = useState(false)
-  const [configMessage, setConfigMessage] = useState<string | null>(null)
-  const [configError, setConfigError] = useState<string | null>(null)
-  const [bilibiliSaving, setBilibiliSaving] = useState(false)
-  const [bilibiliMessage, setBilibiliMessage] = useState<string | null>(null)
-  const [bilibiliError, setBilibiliError] = useState<string | null>(null)
-  const [mockSaving, setMockSaving] = useState(false)
-  const [mockMessage, setMockMessage] = useState<string | null>(null)
-  const [mockError, setMockError] = useState<string | null>(null)
-  const [qwenSaving, setQwenSaving] = useState(false)
-  const [qwenMessage, setQwenMessage] = useState<string | null>(null)
-  const [qwenError, setQwenError] = useState<string | null>(null)
-  const [flowCatalog, setFlowCatalog] = useState<FlowCatalog | null>(null)
-  const [currentFlow, setCurrentFlow] = useState<CurrentFlow | null>(null)
-  const [flowError, setFlowError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let closeEvents: (() => void) | undefined
-    let disposed = false
-
-    const connect = async () => {
-      try {
-        const [snapshot, config, bilibili, qwen] = await Promise.all([
-          fetchSnapshot(controller.signal),
-          fetchGenerationConfig(controller.signal),
-          fetchBilibiliConfig(controller.signal),
-          fetchQwenConfig(controller.signal),
-        ])
-        if (disposed) return
-        store.applySnapshot(snapshot)
-        setGenerationConfig(config)
-        setBilibiliConfig(bilibili)
-        setQwenConfig(qwen)
-        void Promise.all([fetchFlowCatalog(controller.signal), fetchCurrentFlow(controller.signal)])
-          .then(([catalog, current]) => {
-            if (!disposed) {
-              setFlowCatalog(catalog)
-              setCurrentFlow(current)
-              setFlowError(null)
-            }
-          })
-          .catch(() => {
-            if (!disposed) setFlowError("Flow 运行数据暂不可用。")
-          })
-        closeEvents = openOpsEvents({
-          onOpen: () => store.setConnection("open"),
-          onSnapshot: store.applySnapshot,
-          onError: (message) => {
-            store.setConnection("reconnecting")
-            if (message) store.setDataError(message)
-          },
-        })
-      } catch (error) {
-        if (disposed) return
-        store.setConnection("reconnecting")
-        store.setDataError(error instanceof Error ? error.message : "无法加载运行数据。")
-      }
-    }
-
-    void connect()
-    return () => {
-      disposed = true
-      controller.abort()
-      closeEvents?.()
-    }
-    // Stable Zustand actions intentionally initialize this connection once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (view !== "flow") return
-    const refresh = () =>
-      void fetchCurrentFlow()
-        .then((value) => {
-          setCurrentFlow(value)
-          setFlowError(null)
-        })
-        .catch(() => setFlowError("Flow 运行数据暂不可用。"))
-    refresh()
-    const timer = window.setInterval(refresh, 5000)
-    return () => window.clearInterval(timer)
-  }, [view])
-
-  useEffect(() => {
-    if (view !== "config") return
-    const refresh = () =>
-      void fetchBilibiliConfig()
-        .then(setBilibiliConfig)
-        .catch(() => undefined)
-    const timer = window.setInterval(refresh, 5000)
-    return () => window.clearInterval(timer)
-  }, [view])
+  const {
+    store,
+    view,
+    setView,
+    generationConfig,
+    bilibiliConfig,
+    qwenConfig,
+    configSaving,
+    configMessage,
+    configError,
+    bilibiliSaving,
+    bilibiliMessage,
+    bilibiliError,
+    mockSaving,
+    mockMessage,
+    mockError,
+    qwenSaving,
+    qwenMessage,
+    qwenError,
+    flowCatalog,
+    currentFlow,
+    flowError,
+    saveGenerationConfig,
+    saveBilibiliConfig,
+    sendMock,
+    saveQwenConfig,
+  } = useConsole()
 
   if (!store.snapshot) {
     return <LoadingState message={store.dataError} />
@@ -176,70 +72,6 @@ export function App() {
 
   const { snapshot, history } = store
   const command = (value: OpsCommand) => void store.runCommand(value)
-  const saveGenerationConfig = async (
-    value: Pick<GenerationConfig, "model" | "resolution" | "durationSeconds" | "ratio"> & {
-      apiKey?: string
-    },
-  ) => {
-    setConfigSaving(true)
-    setConfigError(null)
-    setConfigMessage(null)
-    try {
-      setGenerationConfig(await updateGenerationConfig(value))
-      setConfigMessage("配置已保存，将用于后续新任务。")
-      return true
-    } catch (error) {
-      setConfigError(error instanceof Error ? error.message : "配置保存失败。")
-      return false
-    } finally {
-      setConfigSaving(false)
-    }
-  }
-  const saveBilibiliConfig = async (value: { roomId: number; cookie?: string }) => {
-    setBilibiliSaving(true)
-    setBilibiliError(null)
-    setBilibiliMessage(null)
-    try {
-      setBilibiliConfig(await updateBilibiliConfig(value))
-      setBilibiliMessage("配置已保存，正在连接直播间弹幕。")
-      return true
-    } catch (error) {
-      setBilibiliError(error instanceof Error ? error.message : "弹幕配置保存失败。")
-      return false
-    } finally {
-      setBilibiliSaving(false)
-    }
-  }
-  const sendMock = async (value: { username: string; text: string }) => {
-    setMockSaving(true)
-    setMockError(null)
-    setMockMessage(null)
-    try {
-      await sendMockDanmaku(value)
-      setMockMessage("模拟弹幕已进入最近 20 秒窗口。")
-      return true
-    } catch (error) {
-      setMockError(error instanceof Error ? error.message : "模拟弹幕发送失败。")
-      return false
-    } finally {
-      setMockSaving(false)
-    }
-  }
-  const saveQwenConfig = async (value: { baseUrl: string; apiKey?: string }) => {
-    setQwenSaving(true)
-    setQwenError(null)
-    setQwenMessage(null)
-    try {
-      setQwenConfig(await updateQwenConfig(value))
-      setQwenMessage("Qwen 配置已保存，将立即用于后续观察和导演调用。")
-      return true
-    } catch (error) {
-      setQwenError(error instanceof Error ? error.message : "Qwen 配置保存失败。")
-      return false
-    } finally {
-      setQwenSaving(false)
-    }
-  }
   const statusTone = toneForStatus(snapshot.session.status)
   const generationRows: StatusRow[] = [
     {
@@ -599,154 +431,5 @@ export function App() {
         </main>
       </div>
     </TooltipProvider>
-  )
-}
-
-function NavButton({
-  active,
-  onClick,
-  icon: Icon,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  icon: LucideIcon
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-current={active ? "page" : undefined}
-      onClick={onClick}
-      className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${active ? "bg-[var(--accent)] text-slate-950" : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"}`}
-    >
-      <Icon className="size-3.5" aria-hidden="true" />
-      {children}
-    </button>
-  )
-}
-
-function ConfirmControl({
-  children,
-  title,
-  description,
-  confirmLabel,
-  disabled,
-  onConfirm,
-  danger = false,
-}: {
-  children: React.ReactNode
-  title: string
-  description: string
-  confirmLabel: string
-  disabled: boolean
-  onConfirm: () => void
-  danger?: boolean
-}) {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant={danger ? "danger" : "secondary"} disabled={disabled}>
-          {children}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel asChild>
-            <Button variant="ghost">取消</Button>
-          </AlertDialogCancel>
-          <AlertDialogAction asChild>
-            <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
-              {confirmLabel}
-            </Button>
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
-
-function LoadingState({ message }: { message: string | null }) {
-  return (
-    <main className="grid min-h-screen place-items-center px-6">
-      <div className="max-w-md text-center">
-        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[var(--brand)] text-slate-950">
-          <Radio className="size-6 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
-        </div>
-        <h1 className="mt-5 text-xl font-bold text-[var(--text)]">正在连接运行时</h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
-          正在等待第一份有效运行快照。
-        </p>
-        {message && (
-          <p role="alert" className="mt-4 text-sm text-rose-600 dark:text-rose-300">
-            {message}
-          </p>
-        )}
-      </div>
-    </main>
-  )
-}
-
-function toneForStatus(status: string): "success" | "warning" | "danger" | "accent" | "neutral" {
-  if (["running", "live", "normal", "ready", "playing"].includes(status)) return "success"
-  if (["starting", "buffering", "recovering", "high", "critical", "fallback"].includes(status))
-    return "warning"
-  if (status === "failed") return "danger"
-  if (["committed", "generating"].includes(status)) return "accent"
-  return "neutral"
-}
-
-function statusLabel(status: string) {
-  return (
-    (
-      {
-        stopped: "已停止",
-        starting: "启动中",
-        buffering: "缓冲中",
-        running: "运行中",
-        stopping: "停止中",
-        recovering: "恢复中",
-        failed: "失败",
-        live: "直播中",
-        normal: "正常",
-        high: "高风险",
-        critical: "严重",
-        fallback: "备用模式",
-        pause: "暂停",
-        planned: "已规划",
-        generating: "生成中",
-        ready: "已就绪",
-        committed: "已提交",
-        playing: "播放中",
-        played: "已播放",
-      } as Record<string, string>
-    )[status] ?? status
-  )
-}
-
-function connectionLabel(status: string) {
-  return (
-    (
-      { connecting: "连接中", open: "已连接", reconnecting: "重连中", closed: "已关闭" } as Record<
-        string,
-        string
-      >
-    )[status] ?? status
-  )
-}
-
-function reasonLabel(reason: string | null) {
-  if (!reason) return "无"
-  return (
-    (
-      { operator: "人工操作", automatic: "自动触发", critical: "缓冲严重不足" } as Record<
-        string,
-        string
-      >
-    )[reason] ?? reason
   )
 }

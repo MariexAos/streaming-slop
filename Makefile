@@ -11,7 +11,7 @@ GO_FILE_MAX_LINES ?= 500
 RUNTIME_FILE_MAX_LINES := 1220
 POSTGRES_STORE_FILE_MAX_LINES := 854
 
-.PHONY: format config-check format-check file-size lint lint-quality test test-race coverage vuln web-install web-lint web-quality web-e2e web-test web-build build-go build check run
+.PHONY: format config-check format-check file-size lint lint-quality test test-race coverage vuln web-install web-lint web-quality web-verify web-e2e web-test web-build build-go build check run
 
 format:
 	$(GOLANGCI_LINT) fmt
@@ -71,6 +71,15 @@ web-lint:
 
 web-quality:
 	cd web && $(PNPM) run quality
+
+# Full frontend acceptance, including browser setup and the Go embedding boundary.
+web-verify:
+	$(MAKE) web-install
+	cd web && $(PNPM) exec playwright install --with-deps chromium
+	$(MAKE) web-quality
+	cd web && $(PNPM) run test:e2e
+	$(GO) test ./internal/adapter/in/webui
+	$(MAKE) build-go
 
 web-e2e: web-build
 	cd web && $(PNPM) run test:e2e

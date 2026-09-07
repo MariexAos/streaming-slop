@@ -8,7 +8,7 @@ const hookRules = Object.fromEntries(
     .filter(
       ([name]) => !["react-hooks/rules-of-hooks", "react-hooks/exhaustive-deps"].includes(name),
     )
-    .map(([name, value]) => [name.replace("react-hooks/", "react-hooks-js/"), value]),
+    .map(([name]) => [name.replace("react-hooks/", "react-hooks-js/"), "error"]),
 )
 
 export default defineConfig({
@@ -26,13 +26,6 @@ export default defineConfig({
     options: { typeAware: true, typeCheck: true },
     categories: { correctness: "error" },
     ignorePatterns: ["test-results/**", "playwright-report/**"],
-    overrides: [
-      {
-        // Freeze the existing formatted file; all other files keep the 500-line limit.
-        files: ["src/App.tsx"],
-        rules: { "max-lines": ["error", { max: 727, skipBlankLines: true, skipComments: true }] },
-      },
-    ],
     rules: {
       ...hookRules,
       "react/rules-of-hooks": "error",
@@ -53,5 +46,5 @@ export default defineConfig({
       "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
     },
   },
-  test: { environment: "node", include: ["src/**/*.test.ts"] },
+  test: { environment: "node", include: ["src/**/*.test.ts"], allowOnly: false },
 })

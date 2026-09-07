@@ -71,3 +71,35 @@ make build      # 构建前端与 Go 可执行文件
 代码按业务能力组织在 `internal/`，外部集成位于 `internal/adapter/`，前端源码位于 `web/`。依赖方向为 `adapter/platform → 用例包 → live`，核心 `live` 包只依赖 Go 标准库。
 
 更多说明见 [设计文档](docs/README.md)、[架构与代码边界](docs/01-architecture.md) 和 [渐进交付计划](docs/06-delivery-plan.md)。
+
+## 前端质量验收
+
+需要 Go（版本见 `go.mod`）、Node.js 24 和 pnpm 11.19.0。仓库根目录执行：
+
+```sh
+make web-verify
+```
+
+该命令按顺序执行冻结锁文件安装、Chromium 及系统依赖安装、Vite+ 格式/类型/React 检查、dependency-cruiser 架构检查、Knip、单元测试、生产构建、Playwright 浏览器测试、Go 嵌入资源测试和可执行文件构建。Linux 首次安装浏览器系统依赖可能需要 sudo；无网络或进程/端口权限应报告环境失败，不能跳过后声称验收通过。
+
+开发迭代从失败阶段继续：
+
+| 阶段 | 在 `web/` 中执行 |
+|---|---|
+| 自动格式化和安全修复 | `pnpm exec vp check --fix` |
+| 格式、类型和 React 检查 | `pnpm exec vp check` |
+| 面向 agent 的 lint 诊断 | `pnpm exec vp lint --format agent --deny-warnings` |
+| 架构依赖 | `pnpm run lint:arch` |
+| 未使用文件、导出和依赖 | `pnpm exec knip` |
+| 单元测试 | `pnpm test` |
+| 构建 | `pnpm run build` |
+| 浏览器测试（需已有最新构建） | `pnpm run test:e2e` |
+| 静态检查、单测和构建组合 | `pnpm run quality` |
+
+所有前端源文件统一遵守 500 个非空、非注释行上限，不设历史基线。不得通过 disable、忽略源码、放宽阈值或跳过测试解决失败。Vitest/Playwright 禁止独占测试，浏览器测试不通过重试掩盖失败。生成产物和 pnpm 锁文件由工具维护，不属于手工源码格式化范围。
+
+`frontend-quality`、`frontend-browser` 在 CI 使用同一套命令；`backend-quality` 复用前端产物并额外运行 Go 全量门禁。`make web-verify` 验证前端及 Go 嵌入边界，不替代后端的全量检查。分支保护中的 required checks 属于 GitHub 仓库设置，需要启用后才能阻止合并。
+
+当前取舍：Vite+ 统一工具入口；pnpm 锁定依赖；React 基础规则使用原生实现，其余推荐规则直接加载官方 Hooks 插件；不引入无障碍检查。`pnpm-workspace.yaml` 中 Vite 版本映射用于识别 Vite+ core 的包版本（0.3.0）与其内置 Vite 8 的兼容关系，不关闭代码质量规则。
+
+编码代理的具体执行流程见 [web/AGENTS.md](web/AGENTS.md)。
