@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "inspect", "inspect, generate or rtmp")
+	mode := flag.String("mode", "inspect", "inspect, generate, compare480 or rtmp")
 	source := flag.String("source", "data/acceptance/blurred-frames/video.mp4", "source clip")
 	destination := flag.String("output", "data/acceptance/continuous", "artifact directory")
 	duration := flag.Duration("duration", 30*time.Second, "RTMP receiving duration")
@@ -67,6 +67,9 @@ func run(ctx context.Context, mode, source, out string, duration time.Duration) 
 	}
 	if mode == "setup" {
 		return saveJSON(out, "character.json", p)
+	}
+	if mode == "compare480" {
+		return compare480(ctx, s, secrets.MiniMaxAPIKey, anchors, source, out)
 	}
 	return testProvider(ctx, s, secrets.MiniMaxAPIKey, p, anchors, mode, source, out)
 }

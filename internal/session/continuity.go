@@ -54,7 +54,10 @@ func applyContinuation(request *generation.Request, c continuation) {
 	request.ParentAssetID = c.AssetID
 	request.Spec.AnchorVersion = fmt.Sprintf("%x", sha256.Sum256([]byte(c.Frame)))
 	request.Spec.FirstFrame = &generation.AssetRef{ID: string(c.AssetID), URL: c.Frame}
-	request.Spec.LastFrame = nil
+	request.Spec.LastFrame = request.ReferenceFrame
 	request.Spec.Mode = generation.ModeFirstFrameToVideo
+	if request.Spec.LastFrame != nil {
+		request.Spec.Mode = generation.ModeFirstLastFrameToVideo
+	}
 	request.Spec.Ratio = "adaptive"
 }

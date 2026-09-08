@@ -87,7 +87,7 @@ func applyAudience(run *flow.FlowRun, state session.View) {
 		run.Nodes[1].Summary = state.Observation.Summary
 	} else {
 		run.Nodes[1].Status = flow.NodePending
-		run.Nodes[1].Summary = "等待 Qwen Observer"
+		run.Nodes[1].Summary = "等待新互动（无需模型观察）"
 	}
 	run.Nodes[2].Status = flow.NodeCompleted
 	run.Nodes[2].Summary = fmt.Sprintf("合并为 %d 个候选方向", len(snapshot.Intents))

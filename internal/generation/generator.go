@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"streaming-agent/internal/live"
+	"streaming-agent/internal/pricing"
 )
 
 type GenerationMode string
@@ -37,8 +38,8 @@ func (s GenerationSpec) Validate() error {
 	if strings.TrimSpace(s.Prompt) == "" {
 		return errors.New("generation prompt is required")
 	}
-	if s.Resolution != "768P" {
-		return errors.New("online generation resolution must be 768P")
+	if s.Resolution != "768P" && s.Resolution != "480P" {
+		return errors.New("online generation resolution must be 480P or 768P")
 	}
 	if s.Duration < 5*time.Second || s.Duration > 15*time.Second || s.Duration%time.Second != 0 {
 		return errors.New("generation duration must be an integer between 5 and 15 seconds")
@@ -76,6 +77,9 @@ const (
 )
 
 type Request struct {
+	BudgetID         string
+	Provider         string
+	PriceQuote       *pricing.Quote
 	CharacterVersion string
 	ReferenceFrame   *AssetRef
 	ParentSegmentID  live.SegmentID

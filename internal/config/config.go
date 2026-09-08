@@ -14,6 +14,7 @@ type Config struct {
 	GenerationProvider       string
 	FalAPIKey                string
 	FalModel                 string
+	FalResolution            string
 	FalBaseURL               string
 	DatabaseURL              string
 	AnthropicAPIKey          string
@@ -55,6 +56,7 @@ func Load() (Config, error) {
 		GenerationProvider:       envOr("GENERATION_PROVIDER", "minimax"),
 		FalAPIKey:                strings.TrimSpace(os.Getenv("FAL_KEY")),
 		FalModel:                 envOr("FAL_MODEL", "minimax/h3-max-turbo/image-to-video"),
+		FalResolution:            envOr("FAL_RESOLUTION", "480P"),
 		FalBaseURL:               envOr("FAL_BASE_URL", "https://queue.fal.run"),
 		DatabaseURL:              strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		AnthropicAPIKey:          strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")),
@@ -67,7 +69,7 @@ func Load() (Config, error) {
 		MiniMaxAPIKey:            strings.TrimSpace(os.Getenv("MINIMAX_API_KEY")),
 		MiniMaxBaseURL:           envOr("MINIMAX_BASE_URL", "https://api.minimaxi.com"),
 		MiniMaxModel:             envOr("MINIMAX_MODEL", "MiniMax-H3-Max"),
-		MiniMaxResolution:        envOr("MINIMAX_RESOLUTION", "768P"),
+		MiniMaxResolution:        envOr("MINIMAX_RESOLUTION", "480P"),
 		MiniMaxRatio:             envOr("MINIMAX_RATIO", "16:9"),
 		BilibiliRoomID:           envInt("BILIBILI_ROOM_ID", 0),
 		BilibiliCookie:           strings.TrimSpace(os.Getenv("BILIBILI_COOKIE")),

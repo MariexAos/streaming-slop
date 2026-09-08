@@ -11,9 +11,11 @@ import (
 )
 
 type BudgetState struct {
-	LimitMicros    int64 `json:"limitMicros"`
-	ChargedMicros  int64 `json:"chargedMicros"`
-	ReservedMicros int64 `json:"reservedMicros"`
+	SessionID       string `json:"sessionId,omitempty"`
+	NextLimitMicros int64  `json:"nextLimitMicros,omitempty"`
+	LimitMicros     int64  `json:"limitMicros"`
+	ChargedMicros   int64  `json:"chargedMicros"`
+	ReservedMicros  int64  `json:"reservedMicros"`
 }
 
 // ConfigureBudget is insert-only: restart cannot reset or raise the ceiling.
@@ -22,14 +24,20 @@ func (s *Store) ConfigureBudget(ctx context.Context, limit int64) error {
 	return err
 }
 func (s *Store) Spending(ctx context.Context) (BudgetState, error) {
+	return s.spending(ctx, "live")
+}
+func (s *Store) spending(ctx context.Context, budgetID string) (BudgetState, error) {
 	var b BudgetState
 	err := s.pool.QueryRow(ctx, `SELECT limit_micros,
- COALESCE((SELECT SUM(charged_micros) FROM spending WHERE budget_id='live'),0),
- COALESCE((SELECT SUM(reserved_micros) FROM spending WHERE budget_id='live' AND charged_micros IS NULL),0)
- FROM spending_limits WHERE id='live'`).Scan(&b.LimitMicros, &b.ChargedMicros, &b.ReservedMicros)
+ COALESCE((SELECT SUM(charged_micros) FROM spending WHERE budget_id=$1),0),
+ COALESCE((SELECT SUM(reserved_micros) FROM spending WHERE budget_id=$1 AND charged_micros IS NULL),0)
+ FROM spending_limits WHERE id=$1`, budgetID).Scan(&b.LimitMicros, &b.ChargedMicros, &b.ReservedMicros)
 	return b, err
 }
 func (s *Store) Reserve(ctx context.Context, id string, amount int64) error {
+	return s.reserve(ctx, "live", id, amount)
+}
+func (s *Store) reserve(ctx context.Context, budgetID, id string, amount int64) error {
 	if id == "" || amount <= 0 {
 		return errors.New("reservation requires id and positive amount")
 	}
@@ -39,7 +47,7 @@ func (s *Store) Reserve(ctx context.Context, id string, amount int64) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var limit, used int64
-	if err = tx.QueryRow(ctx, `SELECT limit_micros FROM spending_limits WHERE id='live' FOR UPDATE`).Scan(&limit); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT limit_micros FROM spending_limits WHERE id=$1 FOR UPDATE`, budgetID).Scan(&limit); err != nil {
 		return fmt.Errorf("lock budget: %w", err)
 	}
 	var existing int64
@@ -50,13 +58,13 @@ func (s *Store) Reserve(ctx context.Context, id string, amount int64) error {
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(COALESCE(charged_micros,reserved_micros)),0) FROM spending WHERE budget_id='live'`).Scan(&used); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(COALESCE(charged_micros,reserved_micros)),0) FROM spending WHERE budget_id=$1`, budgetID).Scan(&used); err != nil {
 		return err
 	}
 	if amount > limit-used {
 		return generation.ErrBudgetExceeded
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO spending(id,budget_id,reserved_micros) VALUES($1,'live',$2)`, id, amount); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO spending(id,budget_id,reserved_micros) VALUES($1,$2,$3)`, id, budgetID, amount); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

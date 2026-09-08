@@ -1,21 +1,13 @@
-import { useQuery } from "@tanstack/react-query"
-import { fetchFlowCatalog, fetchCurrentFlow } from "@/lib/api"
-import { generationOptions } from "@/queries/config"
+import { useModelServices } from "@/queries/services"
+import { useSessionBudget } from "@/queries/budget"
+import { useFlows } from "@/queries/history"
 import { useSnapshot } from "@/queries/ops"
 import { useOpsStore } from "@/store/ops"
 import { CostDashboard } from "./CostDashboard"
 import { FlowDashboard } from "./FlowDashboard"
 
 export function FlowPage() {
-  const catalog = useQuery({
-    queryKey: ["flows"],
-    queryFn: ({ signal }) => fetchFlowCatalog(signal),
-  })
-  const current = useQuery({
-    queryKey: ["flows", "current"],
-    queryFn: ({ signal }) => fetchCurrentFlow(signal),
-    refetchInterval: 5000,
-  })
+  const { catalog, current } = useFlows()
   return (
     <FlowDashboard
       catalog={catalog.data ?? null}
@@ -27,8 +19,18 @@ export function FlowPage() {
 
 export function CostPage() {
   const snapshot = useSnapshot()
-  const config = useQuery(generationOptions)
+  const { query: services } = useModelServices()
+  const { query: budget } = useSessionBudget()
   const history = useOpsStore((state) => state.history.cost)
   if (!snapshot.data) return null
-  return <CostDashboard snapshot={snapshot.data} config={config.data ?? null} history={history} />
+  if (services.error || budget.error)
+    return <p role="alert">{services.error?.message ?? budget.error?.message}</p>
+  return (
+    <CostDashboard
+      snapshot={snapshot.data}
+      services={services.data ?? null}
+      budget={budget.data ?? null}
+      history={history}
+    />
+  )
 }

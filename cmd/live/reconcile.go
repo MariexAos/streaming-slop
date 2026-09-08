@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func startReconciliation(ctx context.Context, s *store.Store, client generation.Generator, provider string) {
+func startReconciliation(ctx context.Context, s *store.Store, resolve func(context.Context, generation.Attempt) (generation.Generator, error)) {
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
@@ -17,7 +17,7 @@ func startReconciliation(ctx context.Context, s *store.Store, client generation.
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := generation.ReconcileClosed(ctx, s, client, provider); err != nil {
+				if err := generation.ReconcileClosedWith(ctx, s, resolve); err != nil {
 					slog.Error("reconcile stopped tasks", "error", err)
 				}
 			}

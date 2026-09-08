@@ -12,11 +12,6 @@ const profile = z.object({
   camera: z.object({ shot: z.string(), angle: z.string() }),
   voiceId: z.string().optional(),
 })
-const budget = z.object({
-  limitMicros: z.number(),
-  chargedMicros: z.number(),
-  reservedMicros: z.number(),
-})
 const attempts = z.array(
   z.object({ id: z.string(), provider: z.string(), jobId: z.string(), status: z.string() }),
 )
@@ -38,17 +33,14 @@ async function request(
   const value: unknown = await response.json()
   return value
 }
-export async function fetchCharacters() {
-  return z.array(profile).parse(await request("characters"))
+export async function fetchCharacters({ signal }: { signal?: AbortSignal } = {}) {
+  return z.array(profile).parse(await request("characters", "GET", undefined, signal))
 }
 export async function fetchCharacter({ signal }: { signal?: AbortSignal } = {}) {
   return profile.parse(await request("characters/current", "GET", undefined, signal))
 }
-export async function fetchBudget({ signal }: { signal?: AbortSignal } = {}) {
-  return budget.parse(await request("budget", "GET", undefined, signal))
-}
-export async function fetchUnresolved() {
-  return attempts.parse(await request("attempts/unresolved"))
+export async function fetchUnresolved({ signal }: { signal?: AbortSignal } = {}) {
+  return attempts.parse(await request("attempts/unresolved", "GET", undefined, signal))
 }
 export async function selectCharacter(versionId: string) {
   await request("characters/current", "PUT", { versionId })

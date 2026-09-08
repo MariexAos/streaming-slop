@@ -10,7 +10,15 @@ type costReconciler interface {
 }
 
 func (r *Runtime) recordCost(ctx context.Context, sessionID live.SessionID, id live.AttemptID, cost *float64) error {
-	if ledger, ok := r.generator.(costReconciler); ok {
+	request, err := r.requestForAttempt(id)
+	if err != nil {
+		return err
+	}
+	client, err := r.generatorFor(ctx, request)
+	if err != nil {
+		return err
+	}
+	if ledger, ok := client.(costReconciler); ok {
 		if err := ledger.ReconcileCost(ctx, string(id), cost); err != nil {
 			return err
 		}

@@ -42,7 +42,9 @@ func TestLifecycleAndCost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{APIKey: "secret", BaseURL: server.URL, DataDir: t.TempDir(), Settings: DefaultSettings()})
+	settings := DefaultSettings()
+	settings.Resolution = "768P"
+	client, err := New(Config{APIKey: "secret", BaseURL: server.URL, DataDir: t.TempDir(), Settings: settings})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +81,7 @@ func TestPricingAndSettings(t *testing.T) {
 	invalid := []Settings{
 		{Model: "MiniMax-H3", Resolution: "768P", Duration: 5, Ratio: "16:9"},
 		{Model: "MiniMax-H3-Max", Resolution: "2K", Duration: 5, Ratio: "16:9"},
-		{Model: "MiniMax-H3-Max", Resolution: "480P", Duration: 5, Ratio: "16:9"},
+		{Model: "MiniMax-H3-Max", Resolution: "720P", Duration: 5, Ratio: "16:9"},
 	}
 	for _, settings := range invalid {
 		if err := settings.Validate(); err == nil {

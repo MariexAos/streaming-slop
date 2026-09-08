@@ -17,13 +17,28 @@ type ReconciliationStore interface {
 
 // ReconcileClosed continues accounting after playback has stopped.
 func ReconcileClosed(ctx context.Context, s ReconciliationStore, c Generator, provider string) error {
+	return ReconcileClosedWith(ctx, s, func(_ context.Context, a Attempt) (Generator, error) {
+		if a.Provider != provider {
+			return nil, nil
+		}
+		return c, nil
+	})
+}
+func ReconcileClosedWith(ctx context.Context, s ReconciliationStore, resolve func(context.Context, Attempt) (Generator, error)) error {
 	pending, err := s.ClosedAttempts(ctx)
 	if err != nil {
 		return err
 	}
 	for _, item := range pending {
 		a := item.Attempt
-		if a.Provider != provider || a.ProviderJobID == "" {
+		if a.ProviderJobID == "" {
+			continue
+		}
+		c, err := resolve(ctx, a)
+		if err != nil {
+			return err
+		}
+		if c == nil {
 			continue
 		}
 		job, err := c.Status(ctx, a.ProviderJobID)

@@ -33,7 +33,15 @@ func (r *Runtime) AttachJob(ctx context.Context, id live.AttemptID, jobID string
 	if jobID == "" {
 		return errors.New("provider task id required")
 	}
-	if _, err := r.generator.Status(ctx, jobID); err != nil {
+	request, err := r.requestForAttempt(id)
+	if err != nil {
+		return err
+	}
+	client, err := r.generatorFor(ctx, request)
+	if err != nil {
+		return err
+	}
+	if _, err := client.Status(ctx, jobID); err != nil {
 		return fmt.Errorf("verify provider task: %w", err)
 	}
 	r.mu.Lock()
@@ -43,7 +51,7 @@ func (r *Runtime) AttachJob(ctx context.Context, id live.AttemptID, jobID string
 		return errors.New("attempt is not awaiting reconciliation")
 	}
 	for _, other := range r.attempts {
-		if other.ProviderJobID == jobID {
+		if other.Provider == a.Provider && other.ProviderJobID == jobID {
 			return errors.New("task already linked")
 		}
 	}

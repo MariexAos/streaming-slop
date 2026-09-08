@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,9 +27,11 @@ func (r *Runtime) submit(ctx context.Context) {
 	sessionID := r.session.ID
 	r.mu.Unlock()
 
+	var workers sync.WaitGroup
 	for _, candidate := range candidates {
-		r.reserveAndSubmit(ctx, sessionID, candidate)
+		workers.Go(func() { r.reserveAndSubmit(ctx, sessionID, candidate) })
 	}
+	workers.Wait()
 }
 
 func (r *Runtime) reserveAndSubmit(ctx context.Context, sessionID live.SessionID, candidate generation.Candidate) {
@@ -37,7 +40,7 @@ func (r *Runtime) reserveAndSubmit(ctx context.Context, sessionID live.SessionID
 		return
 	}
 	r.mu.Lock()
-	if r.session == nil || r.session.ID != sessionID || r.stopWanted || !r.validContinuation(continuation) {
+	if r.session == nil || r.session.ID != sessionID || r.stopWanted || !r.validContinuation(continuation) || r.replanning[candidate.SegmentID] {
 		r.mu.Unlock()
 		return
 	}
@@ -66,6 +69,9 @@ func (r *Runtime) reserveAndSubmit(ctx context.Context, sessionID live.SessionID
 		Duration: r.config.SegmentDuration, Direction: segmentValue.Direction,
 		World: r.session.World, Spec: directedSpec(segmentValue.Direction, r.config.AnchorFrames),
 	}
+	if r.session.BudgetLimitMicros > 0 {
+		request.BudgetID = string(sessionID)
+	}
 	request.ReferenceFrame = &generation.AssetRef{ID: "chat-live-start", URL: r.config.AnchorFrames["chat-live-start"]}
 	if r.session.Profile != nil {
 		request.CharacterVersion = r.session.Profile.ID
@@ -73,11 +79,14 @@ func (r *Runtime) reserveAndSubmit(ctx context.Context, sessionID live.SessionID
 	applyContinuation(&request, continuation)
 	request.Spec.Duration = segmentValue.End - segmentValue.Start
 	var buildErr error
-	request, buildErr = r.buildRequest(request)
+	request, buildErr = r.buildRequest(ctx, request)
 	if buildErr != nil {
 		r.lastGenErr = buildErr.Error()
 		r.mu.Unlock()
 		return
+	}
+	if request.Provider != "" {
+		attempt.Provider = request.Provider
 	}
 	attempt.PlanRevision = segmentValue.PlanRevision
 	attempt.Request = request
@@ -99,7 +108,16 @@ func (r *Runtime) reserveAndSubmit(ctx context.Context, sessionID live.SessionID
 }
 
 func (r *Runtime) submitAttempt(ctx context.Context, sessionID live.SessionID, attempt generation.Attempt, request generation.Request) {
-	job, err := r.generator.Submit(ctx, request)
+	if asset := r.reusableAsset(request); asset != nil {
+		r.reuseAsset(ctx, sessionID, request, *asset)
+		return
+	}
+	client, err := r.generatorFor(ctx, attemptRequest(attempt))
+	if err != nil {
+		r.recordGenerationError(err)
+		return
+	}
+	job, err := client.Submit(ctx, request)
 	if err != nil {
 		if errors.Is(err, generation.ErrBudgetExceeded) {
 			r.failAttempt(ctx, attempt.ID, "budget", err)
@@ -137,7 +155,12 @@ func (r *Runtime) poll(ctx context.Context) {
 	r.mu.Unlock()
 
 	for _, attempt := range pending {
-		job, err := r.generator.Status(ctx, attempt.ProviderJobID)
+		client, err := r.generatorFor(ctx, attemptRequest(attempt))
+		if err != nil {
+			r.recordGenerationError(err)
+			continue
+		}
+		job, err := client.Status(ctx, attempt.ProviderJobID)
 		if err != nil {
 			r.recordGenerationError(err)
 			continue
@@ -167,6 +190,7 @@ func (r *Runtime) completeAttempt(ctx context.Context, sessionID live.SessionID,
 		r.mu.Unlock()
 		return
 	}
+	request := attemptRequest(*attempt)
 	status := attempt.Status
 	duration := attempt.Request.Duration
 	if duration <= 0 {
@@ -181,7 +205,12 @@ func (r *Runtime) completeAttempt(ctx context.Context, sessionID live.SessionID,
 		r.transitionAttempt(ctx, sessionID, attemptID, generation.AttemptPreparing)
 	}
 
-	result, err := r.generator.Result(ctx, jobID)
+	client, err := r.generatorFor(ctx, request)
+	if err != nil {
+		r.recordGenerationError(err)
+		return
+	}
+	result, err := client.Result(ctx, jobID)
 	if err != nil {
 		r.failAttempt(ctx, attemptID, "result", err)
 		return
@@ -201,14 +230,9 @@ func (r *Runtime) completeAttempt(ctx context.Context, sessionID live.SessionID,
 		r.failAttempt(ctx, attemptID, "normalize", err)
 		return
 	}
-	observed, err := r.inspect(ctx, attemptID, result.AssetURL)
-	if err != nil {
-		r.failAttempt(ctx, attemptID, "visual_review", err)
-		return
-	}
 	now := time.Now().UTC()
 	asset := live.VideoAsset{
-		Observed: observed, ID: live.AssetID(uuid.NewString()), AttemptID: attemptID, Source: live.AssetSourceGenerated,
+		ID: live.AssetID(uuid.NewString()), AttemptID: attemptID, Source: live.AssetSourceGenerated,
 		URI: result.AssetURL, NormalizedURI: prepared.Path, Duration: prepared.Duration,
 		Width: prepared.Width, Height: prepared.Height, FPS: prepared.FrameRate, VerifiedAt: now,
 	}
@@ -311,7 +335,10 @@ func successfulLatencies(attempts []generation.Attempt) []time.Duration {
 	return values
 }
 
-func (r *Runtime) buildRequest(request generation.Request) (generation.Request, error) {
+func (r *Runtime) buildRequest(ctx context.Context, request generation.Request) (generation.Request, error) {
+	if r.config.BuildGeneration != nil {
+		return r.config.BuildGeneration(ctx, request)
+	}
 	if builder, ok := r.generator.(generation.RequestBuilder); ok {
 		return builder.BuildRequest(request)
 	}

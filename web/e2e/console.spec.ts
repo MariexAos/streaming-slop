@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { snapshotFixture } from "../src/lib/snapshot.fixture"
+import { servicesFixture } from "../src/lib/services.fixture"
 
 const generation = {
   provider: "minimax",
@@ -35,6 +36,9 @@ const detail = (id: string) => ({
 })
 
 async function mockAPI(page: Page) {
+  await page.route("**/live-preview/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<p>测试播放器</p>" }),
+  )
   await page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname
     if (path === "/api/v1/ops/events") {
@@ -43,7 +47,24 @@ async function mockAPI(page: Page) {
     }
     const responses: Record<string, unknown> = {
       "/api/v1/ops/snapshot": snapshotFixture(),
+      "/api/v1/ops/readiness": {
+        ready: true,
+        target: "本地测试",
+        characterId: "host",
+        characterName: "主播",
+        credentialSaved: true,
+        availableMicros: 30000000,
+        minimumMicros: 22500000,
+        blockers: [],
+      },
       "/api/v1/config/generation": generation,
+      "/api/v1/config/services": servicesFixture(),
+      "/api/v1/budget": {
+        limitMicros: 10000000,
+        nextLimitMicros: 10000000,
+        chargedMicros: 0,
+        reservedMicros: 0,
+      },
       "/api/v1/config/bilibili": {
         roomId: 123,
         cookieConfigured: true,
@@ -72,7 +93,7 @@ test.beforeEach(async ({ page }) => {
 
 test("loads the console and reports initialization failures", async ({ page }) => {
   await page.goto("/")
-  await expect(page.getByRole("heading", { name: "直播生成控制台" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Streaming Slop" })).toBeVisible()
   await page.route("**/ops/snapshot", (route) =>
     route.fulfill({ status: 503, json: { code: "offline", message: "服务暂不可用" } }),
   )
@@ -88,6 +109,7 @@ test("applies SSE snapshots and rejects stale revisions", async ({ page }) => {
     }),
   )
   await page.goto("/")
+  await page.getByText("运行详情 · 缓冲、时间轴与推流状态", { exact: true }).click()
   await expect(page.getByText(/session-1 · 版本 3/)).toBeVisible()
 })
 
@@ -101,12 +123,12 @@ test("disables pending commands and reports rejection", async ({ page }) => {
     await route.fulfill({ status: 409, json: { code: "conflict", message: "停止失败，请重试" } })
   })
   await page.goto("/")
-  await page.getByRole("button", { name: "停止", exact: true }).click()
+  await page.getByRole("button", { name: "结束直播", exact: true }).click()
   await page.getByRole("button", { name: "停止会话", exact: true }).click()
-  await expect(page.getByRole("button", { name: "停止", exact: true })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "结束直播", exact: true })).toBeDisabled()
   finish?.()
   await expect(page.getByText("停止失败，请重试", { exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "停止", exact: true })).toBeEnabled()
+  await expect(page.getByRole("button", { name: "结束直播", exact: true })).toBeEnabled()
 })
 
 test("retains configuration input after failure and clears the key after success", async ({
@@ -130,9 +152,10 @@ test("retains configuration input after failure and clears the key after success
   })
   await page.goto("/")
   await page.getByRole("button", { name: "配置", exact: true }).click()
+  await page.getByText("Qwen 备用配置（高级）", { exact: true }).click()
   const base = page.getByLabel("OpenAI 兼容 Base URL")
   await base.fill("https://new.example.com")
-  const key = page.locator('input[type="password"]').nth(1)
+  const key = page.getByLabel("Qwen API Key", { exact: true })
   await key.fill("test-key")
   await page.getByRole("button", { name: "保存 Qwen 配置" }).click()
   await expect(page.getByText("保存失败", { exact: true })).toBeVisible()
@@ -162,11 +185,11 @@ test("does not show previous session details while switching", async ({ page }) 
 })
 
 test("configuration failure does not block live operations", async ({ page }) => {
-  await page.route("**/config/generation", (route) =>
+  await page.route("**/config/services", (route) =>
     route.fulfill({ status: 503, json: { code: "offline", message: "生成配置暂不可用" } }),
   )
   await page.goto("/")
-  await expect(page.getByRole("heading", { name: "直播生成控制台" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Streaming Slop" })).toBeVisible()
   await page.getByRole("button", { name: "配置", exact: true }).click()
   await expect(page.getByText("生成配置暂不可用", { exact: true })).toBeVisible()
 })
@@ -174,6 +197,7 @@ test("configuration failure does not block live operations", async ({ page }) =>
 test("background room refresh preserves an edited draft", async ({ page }) => {
   await page.goto("/")
   await page.getByRole("button", { name: "配置", exact: true }).click()
+  await page.getByText("Bilibili 弹幕接入（可选）", { exact: true }).click()
   const room = page.getByLabel("直播间房间号")
   await expect(room).toHaveValue("123")
   await room.fill("789")
@@ -210,7 +234,12 @@ test("switches persisted character versions and binds unknown submissions", asyn
   })
   await page.route("**/api/v1/budget", (route) =>
     route.fulfill({
-      json: { limitMicros: 10000000, chargedMicros: 2500000, reservedMicros: 2500000 },
+      json: {
+        limitMicros: 10000000,
+        nextLimitMicros: 10000000,
+        chargedMicros: 2500000,
+        reservedMicros: 2500000,
+      },
     }),
   )
   await page.route("**/api/v1/attempts/unresolved", (route) =>
@@ -246,11 +275,191 @@ test("keeps preparation and keyboard navigation usable on a narrow screen in dar
   await expect(page.getByRole("heading", { name: "直播安全余量" })).not.toBeVisible()
   await page.getByText("运行详情 · 缓冲、时间轴与推流状态", { exact: true }).press("Enter")
   await expect(page.getByRole("heading", { name: "直播安全余量" })).toBeVisible()
-  await page.getByRole("button", { name: "检查开播配置" }).click()
+  await page.getByRole("button", { name: "配置", exact: true }).click()
   await expect(page.getByRole("heading", { name: "为下一场直播做好准备" })).toBeVisible()
   await page.getByRole("button", { name: "运行", exact: true }).click()
   await expect(page.getByRole("region", { name: "开播准备" })).toBeVisible()
   expect(await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(
     true,
   )
+})
+
+test("start preparation stays on the page and does not claim to be live", async ({ page }) => {
+  let current = {
+    ...snapshotFixture(),
+    session: { ...snapshotFixture().session, status: "stopped" },
+    controls: { ...snapshotFixture().controls, canStart: true, canStop: false },
+  }
+  await page.route("**/ops/snapshot", (route) => route.fulfill({ json: current }))
+  await page.route("**/ops/start", async (route) => {
+    current = {
+      ...current,
+      revision: 2,
+      session: { ...current.session, status: "buffering" },
+      controls: { ...current.controls, canStart: false, canStop: true },
+    }
+    await route.fulfill({
+      json: { command: "start", status: "accepted", acceptedAt: "2026-09-08T00:00:00Z" },
+    })
+  })
+  await page.goto("/")
+  await expect(page.getByRole("button", { name: "开始直播", exact: true })).toBeEnabled()
+  await page.getByRole("button", { name: "修改开播配置" }).click()
+  await expect(page.getByRole("heading", { name: "为下一场直播做好准备" })).toBeVisible()
+  await page.getByRole("button", { name: "返回开播摘要" }).click()
+  await page.getByRole("button", { name: "开始直播", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "正在生成画面并积累缓冲" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "停止准备" })).toBeVisible()
+  await expect(page.getByRole("textbox", { name: "弹幕内容" })).not.toBeVisible()
+  await page.reload()
+  await expect(page.getByRole("heading", { name: "正在生成画面并积累缓冲" })).toBeVisible()
+})
+
+test("insufficient startup budget blocks generation with an explanation", async ({ page }) => {
+  const snapshot = snapshotFixture()
+  await page.route("**/ops/snapshot", (route) =>
+    route.fulfill({
+      json: {
+        ...snapshot,
+        session: { ...snapshot.session, status: "stopped" },
+        controls: { ...snapshot.controls, canStart: true, canStop: false },
+      },
+    }),
+  )
+  await page.route("**/ops/readiness", (route) =>
+    route.fulfill({
+      json: {
+        ready: false,
+        target: "本地测试",
+        characterId: "host",
+        characterName: "主播",
+        credentialSaved: true,
+        availableMicros: 1000000,
+        minimumMicros: 22500000,
+        blockers: ["启动额度不足"],
+      },
+    }),
+  )
+  await page.goto("/")
+  await expect(page.getByText("启动额度不足", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "开始直播", exact: true })).toBeDisabled()
+})
+
+test("saving provider credentials refreshes readiness", async ({ page }) => {
+  let saved = false
+  const snapshot = snapshotFixture()
+  await page.route("**/ops/snapshot", (route) =>
+    route.fulfill({
+      json: {
+        ...snapshot,
+        session: { ...snapshot.session, status: "stopped" },
+        controls: { ...snapshot.controls, canStart: true, canStop: false },
+      },
+    }),
+  )
+  await page.route("**/ops/readiness", (route) =>
+    route.fulfill({
+      json: {
+        ready: saved,
+        target: "本地测试",
+        characterId: "host",
+        characterName: "主播",
+        credentialSaved: saved,
+        availableMicros: 30000000,
+        minimumMicros: 22500000,
+        blockers: saved ? [] : ["请保存凭据"],
+      },
+    }),
+  )
+  await page.route("**/config/services/credentials", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ provider: "minimax", apiKey: "test-key" })
+    saved = true
+    await route.fulfill({ json: servicesFixture() })
+  })
+  await page.goto("/")
+  await expect(page.getByRole("button", { name: "开始直播", exact: true })).toBeDisabled()
+  await page.getByRole("button", { name: "修改开播配置" }).click()
+  await page.getByLabel("MiniMax API Key", { exact: true }).fill("test-key")
+  await page.getByRole("button", { name: "保存 MiniMax 凭据" }).click()
+  await expect(page.getByLabel("MiniMax API Key", { exact: true })).toHaveValue("")
+  await page.getByRole("button", { name: "返回开播摘要" }).click()
+  await expect(page.getByRole("button", { name: "开始直播", exact: true })).toBeEnabled()
+})
+
+test("shows provider pricing, CNY estimate and promotion expiry from the API", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "配置", exact: true }).click()
+  await page
+    .getByText("fal · minimax/h3-max-turbo/image-to-video · 计费详情", { exact: true })
+    .click()
+  await expect(page.getByText("标准价：USD 0.025 / 1 生成视频秒", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("当前人民币估算：¥0.041938 / 1 生成视频秒", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText(/优惠到期：.*2026.*9.*14.*UTC/)).toBeVisible()
+  await expect(page.getByText(/预算按有效价格预留/)).toBeVisible()
+})
+
+test("switches new video tasks during a live session without restarting", async ({ page }) => {
+  let current = servicesFixture()
+  let commands = 0
+  await page.route("**/ops/start", () => {
+    commands++
+  })
+  await page.route("**/ops/stop", () => {
+    commands++
+  })
+  await page.route("**/config/services", async (route) => {
+    if (route.request().method() === "PUT") {
+      expect(route.request().postDataJSON()).toEqual({
+        video: {
+          provider: "fal",
+          model: "minimax/h3-max-turbo/image-to-video",
+          resolution: "480P",
+        },
+        text: current.saved.text,
+      })
+      current = {
+        ...current,
+        saved: {
+          ...current.saved,
+          video: {
+            provider: "fal",
+            model: "minimax/h3-max-turbo/image-to-video",
+            resolution: "480P",
+          },
+        },
+      }
+    }
+    await route.fulfill({ json: current })
+  })
+  await page.goto("/")
+  const selector = page.getByLabel("后续视频任务供应商与模型")
+  await selector.selectOption("fal:minimax/h3-max-turbo/image-to-video")
+  await expect(selector).toHaveValue("fal:minimax/h3-max-turbo/image-to-video")
+  await expect(page.getByRole("button", { name: "结束直播", exact: true })).toBeEnabled()
+  await page.reload()
+  await expect(selector).toHaveValue("fal:minimax/h3-max-turbo/image-to-video")
+  expect(commands).toBe(0)
+})
+
+test("live preview uses the output stream and never falls back to a generated clip", async ({
+  page,
+}) => {
+  const snapshot = snapshotFixture()
+  snapshot.stream.status = "starting"
+  await page.route("**/api/v1/ops/snapshot", (route) => route.fulfill({ json: snapshot }))
+  await page.goto("/")
+  const preview = page.getByRole("region", { name: "直播预览与互动" })
+  await expect(preview.getByText("推流开始后显示直播画面，与 RTMP 输出同源")).toBeVisible()
+  await expect(preview.locator("video")).toHaveCount(0)
+  await expect(preview.locator("iframe")).toHaveCount(0)
+
+  snapshot.stream.status = "live"
+  await page.reload()
+  await expect(preview.locator("iframe")).toHaveAttribute(
+    "src",
+    "/live-preview/?autoplay=true&muted=true&controls=true&playsinline=true",
+  )
+  await expect(preview.locator("video")).toHaveCount(0)
 })

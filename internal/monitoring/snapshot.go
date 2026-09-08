@@ -3,15 +3,16 @@ package monitoring
 import "time"
 
 type Snapshot struct {
-	Revision   uint64     `json:"revision"`
-	ObservedAt time.Time  `json:"observedAt"`
-	Session    Session    `json:"session"`
-	Buffer     Buffer     `json:"buffer"`
-	Timeline   []Segment  `json:"timeline"`
-	Generation Generation `json:"generation"`
-	Stream     Stream     `json:"stream"`
-	Fallback   Fallback   `json:"fallback"`
-	Controls   Controls   `json:"controls"`
+	Interaction string     `json:"interaction"`
+	Revision    uint64     `json:"revision"`
+	ObservedAt  time.Time  `json:"observedAt"`
+	Session     Session    `json:"session"`
+	Buffer      Buffer     `json:"buffer"`
+	Timeline    []Segment  `json:"timeline"`
+	Generation  Generation `json:"generation"`
+	Stream      Stream     `json:"stream"`
+	Fallback    Fallback   `json:"fallback"`
+	Controls    Controls   `json:"controls"`
 }
 
 type Session struct {

@@ -29,10 +29,13 @@ func TestContinuationRequiresActualPredecessorAndRejectsReplacement(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	var request generation.Request
+	request := generation.Request{ReferenceFrame: &generation.AssetRef{ID: "identity", URL: "original-person"}}
 	applyContinuation(&request, link)
 	if request.Spec.FirstFrame.URL != "actual-tail" || request.ParentAssetID != "old" {
 		t.Fatal("anchor used instead of actual tail")
+	}
+	if request.Spec.LastFrame == nil || request.Spec.LastFrame.URL != "original-person" || request.Spec.Mode != generation.ModeFirstLastFrameToVideo {
+		t.Fatal("continuation lost the original identity anchor")
 	}
 	r.session.Timeline.Segments[0].Asset = &live.VideoAsset{ID: "new"}
 	if r.validContinuation(link) {

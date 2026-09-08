@@ -11,13 +11,15 @@ import (
 var ErrHistoryNotFound = errors.New("session history not found")
 
 type HistorySummary struct {
-	ID           string    `json:"id"`
-	Status       string    `json:"status"`
-	StartedAt    time.Time `json:"startedAt"`
-	EndedAt      time.Time `json:"endedAt"`
-	SegmentTotal int       `json:"segmentTotal"`
-	ReadyTotal   int       `json:"readyTotal"`
-	CostCNY      float64   `json:"costCny"`
+	BudgetLimitMicros int64     `json:"budgetLimitMicros,omitempty"`
+	ReservedMicros    int64     `json:"reservedMicros,omitempty"`
+	ID                string    `json:"id"`
+	Status            string    `json:"status"`
+	StartedAt         time.Time `json:"startedAt"`
+	EndedAt           time.Time `json:"endedAt"`
+	SegmentTotal      int       `json:"segmentTotal"`
+	ReadyTotal        int       `json:"readyTotal"`
+	CostCNY           float64   `json:"costCny"`
 }
 
 type HistorySegment struct {

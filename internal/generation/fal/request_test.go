@@ -25,6 +25,7 @@ func TestTurboUsesExactFramesAndRootQueueURL(t *testing.T) {
 			}
 			_, _ = w.Write([]byte(`{"request_id":"job"}`))
 		case "/minimax/h3-max-turbo/requests/job/status":
+			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"status":"IN_PROGRESS","request_id":"job"}`))
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)

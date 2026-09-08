@@ -38,16 +38,29 @@ func (r *Runtime) replanAudience(ctx context.Context, limit int) {
 		r.mu.Unlock()
 		return
 	}
-	candidates := plannedCandidates(r.session.Timeline.Segments, len(r.session.Timeline.Segments))
+	r.audienceError = ""
 	freezeAt := r.session.Timeline.Playhead + r.session.Timeline.CommitHorizon
-	candidates = filterMutable(candidates, freezeAt)
-	if !r.config.Continuous && len(candidates) > limit {
-		candidates = candidates[:limit]
+	candidates := mutablePlannedCandidates(r.session.Timeline.Segments, freezeAt, limit)
+	if r.replanning == nil {
+		r.replanning = make(map[live.SegmentID]bool)
 	}
+	for _, candidate := range candidates {
+		r.replanning[candidate.segment.ID] = true
+	}
+	defer func() {
+		r.mu.Lock()
+		for _, candidate := range candidates {
+			delete(r.replanning, candidate.segment.ID)
+		}
+		r.mu.Unlock()
+	}()
 	sessionID := r.session.ID
 	world := r.session.World
 	r.mu.Unlock()
 
+	if len(candidates) == 0 {
+		return
+	}
 	observation, ok := r.observeAudience(ctx, sessionID, snapshot)
 	if !ok {
 		return
@@ -55,7 +68,7 @@ func (r *Runtime) replanAudience(ctx context.Context, limit int) {
 	audienceInput := observedAudience(snapshot, observation)
 	replacements := make([]live.Segment, 0, len(candidates))
 	for _, candidate := range candidates {
-		directionValue, err := r.director.Direct(ctx, director.Input{
+		directionValue, err := r.direct(ctx, director.Input{
 			Duration: r.config.SegmentDuration,
 			World:    world, StorySeed: r.config.StorySeed, Previous: candidate.previous,
 			Position: candidate.segment.Start, Audience: audienceInput,
@@ -64,6 +77,7 @@ func (r *Runtime) replanAudience(ctx context.Context, limit int) {
 			r.mu.Lock()
 			r.lastGenErr = err.Error()
 			r.audienceRevision = snapshot.Revision
+			r.audienceError = err.Error()
 			r.mu.Unlock()
 			return
 		}
@@ -85,7 +99,7 @@ func (r *Runtime) applyReplan(ctx context.Context, sessionID live.SessionID, rev
 	}
 	for _, next := range replacements {
 		current, ok := r.session.Timeline.Segment(next.ID)
-		if !ok || current.PlanRevision+1 != next.PlanRevision || current.Start < r.session.Timeline.Playhead+r.session.Timeline.CommitHorizon {
+		if !ok || current.Status != live.SegmentPlanned || current.PlanRevision+1 != next.PlanRevision || current.Start < r.session.Timeline.Playhead+r.session.Timeline.CommitHorizon {
 			return
 		}
 		if current.Status == live.SegmentCommitted || current.Status == live.SegmentPlaying || current.Status == live.SegmentPlayed {
@@ -101,6 +115,9 @@ func (r *Runtime) applyReplan(ctx context.Context, sessionID live.SessionID, rev
 		*current = next
 	}
 	r.audienceRevision = revision
+	if len(replacements) > 0 {
+		r.audiencePosition = replacements[0].Start
+	}
 }
 
 func observedAudience(snapshot audience.Snapshot, observation audience.Observation) *director.AudienceInput {
@@ -138,34 +155,20 @@ func plannedCandidates(segments []live.Segment, limit int) []audienceCandidate {
 	return candidates
 }
 
+// Text messages need no model observation pass. Record the source window and
+// let the director interpret the original requests in its single planning call.
 func (r *Runtime) observeAudience(ctx context.Context, sessionID live.SessionID, snapshot audience.Snapshot) (audience.Observation, bool) {
-	observation := audience.Observation{}
-	if r.config.Observer != nil {
-		value, err := r.config.Observer.Observe(ctx, audience.Input{Messages: snapshot.Messages})
-		if err != nil {
-			r.mu.Lock()
-			r.lastGenErr = err.Error()
-			observation = r.lastObservation
-			r.mu.Unlock()
-			if recordErr := r.store.RecordObserverRun(ctx, sessionID, snapshot.Revision, snapshot.Messages, observation, err.Error()); recordErr != nil {
-				r.recordGenerationError(recordErr)
-			}
-			if observation.Summary == "" {
-				r.mu.Lock()
-				r.audienceRevision = snapshot.Revision
-				r.mu.Unlock()
-				return observation, false
-			}
-		} else {
-			if err := r.store.RecordObserverRun(ctx, sessionID, snapshot.Revision, snapshot.Messages, value, ""); err != nil {
-				r.recordGenerationError(err)
-			}
-			r.mu.Lock()
-			r.lastObservation = value
-			r.mu.Unlock()
-			observation = value
-		}
+	observation := audience.Observation{Summary: snapshot.Summary, Mood: "unspecified"}
+	for _, intent := range snapshot.Intents {
+		observation.Intents = append(observation.Intents, audience.ObservedIntent(intent))
 	}
+	if err := r.store.RecordObserverRun(ctx, sessionID, snapshot.Revision, snapshot.Messages, observation, ""); err != nil {
+		r.recordGenerationError(err)
+		return observation, false
+	}
+	r.mu.Lock()
+	r.lastObservation = observation
+	r.mu.Unlock()
 	return observation, true
 }
 
@@ -173,6 +176,20 @@ func filterMutable(candidates []audienceCandidate, freezeAt time.Duration) []aud
 	result := make([]audienceCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.segment.Start >= freezeAt {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+func mutablePlannedCandidates(segments []live.Segment, freezeAt time.Duration, limit int) []audienceCandidate {
+	candidates := filterMutable(plannedCandidates(segments, len(segments)), freezeAt)
+	var result []audienceCandidate
+	for _, candidate := range candidates {
+		if len(result) >= limit {
+			break
+		}
+		if candidate.segment.Status == live.SegmentPlanned {
 			result = append(result, candidate)
 		}
 	}

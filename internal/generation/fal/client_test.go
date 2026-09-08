@@ -27,7 +27,7 @@ func TestQueueLifecycleAndImmediateDownload(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Fatal(err)
 			}
-			if request.Duration != 5 || request.Resolution != "768P" || request.AspectRatio != "16:9" ||
+			if request.Duration != 5 || request.Resolution != "480P" || request.AspectRatio != "16:9" ||
 				request.PromptExpansionMode != "balanced" || !request.EnableSafetyChecker {
 				t.Fatalf("unexpected request: %+v", request)
 			}

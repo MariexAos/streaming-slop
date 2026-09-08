@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"streaming-agent/internal/generation"
+	"streaming-agent/internal/pricing"
 )
 
 const TurboModel = "minimax/h3-max-turbo/image-to-video"
@@ -31,7 +32,7 @@ func (c *Client) compile(input generation.Request) (submitRequest, error) {
 	}
 	resolution := input.Spec.Resolution
 	if resolution == "" {
-		resolution = "768P"
+		resolution = c.resolution
 	}
 	if resolution != "480P" && resolution != "768P" {
 		return submitRequest{}, fmt.Errorf("unsupported fal resolution %q", resolution)
@@ -73,7 +74,17 @@ func (c *Client) BuildRequest(input generation.Request) (generation.Request, err
 	if err != nil {
 		return input, err
 	}
+	q, err := pricing.Lookup("fal", c.model, request.Resolution, time.Now())
+	if err != nil {
+		return input, err
+	}
 	input.Model = c.model
 	input.Spec.Prompt = request.Prompt
+	input.Spec.Resolution = request.Resolution
+	input.Spec.Duration = time.Duration(request.Duration) * time.Second
+	input.Duration = input.Spec.Duration
+	input.PriceQuote = &q
+	price := q.Reserve(1)
+	input.UnitPriceCNY = &price
 	return input, nil
 }

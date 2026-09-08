@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"streaming-agent/internal/generation"
+	"streaming-agent/internal/pricing"
 )
 
 const (
@@ -31,7 +32,7 @@ type Settings struct {
 }
 
 func DefaultSettings() Settings {
-	return Settings{Model: DefaultModel, Resolution: "768P", Duration: 5, Ratio: "16:9"}
+	return Settings{Model: DefaultModel, Resolution: "480P", Duration: 5, Ratio: "16:9"}
 }
 
 func (s Settings) Validate() error {
@@ -41,8 +42,8 @@ func (s Settings) Validate() error {
 	if s.Duration < 5 || s.Duration > 15 {
 		return fmt.Errorf("duration must be between 5 and 15 seconds")
 	}
-	if s.Resolution != "768P" {
-		return fmt.Errorf("online generation resolution must be 768P")
+	if s.Resolution != "768P" && s.Resolution != "480P" {
+		return fmt.Errorf("online generation resolution must be 480P or 768P")
 	}
 	if s.Ratio != "16:9" {
 		return fmt.Errorf("online text-to-video ratio must be 16:9")
@@ -51,10 +52,11 @@ func (s Settings) Validate() error {
 }
 
 func UnitPriceCNY(model, resolution string) (float64, error) {
-	if model != DefaultModel || resolution != "768P" {
-		return 0, fmt.Errorf("no price for %s at %s", model, resolution)
+	q, err := pricing.Lookup("minimax", model, resolution, time.Now())
+	if err != nil {
+		return 0, err
 	}
-	return 0.50, nil
+	return q.Estimate(1), nil
 }
 
 type Config struct {
@@ -179,15 +181,20 @@ func (c *Client) BuildRequest(request generation.Request) (generation.Request, e
 		}
 		spec.Prompt = prompt
 	}
+	if spec.Resolution == "" {
+		spec.Resolution = settings.Resolution
+	}
 	if err := spec.Validate(); err != nil {
 		return generation.Request{}, fmt.Errorf("submit MiniMax request: %w", err)
 	}
 	request.Spec = spec
 	request.Model = settings.Model
-	price, err := UnitPriceCNY(request.Model, spec.Resolution)
+	q, err := pricing.Lookup("minimax", request.Model, spec.Resolution, time.Now())
 	if err != nil {
 		return request, err
 	}
+	price := q.Reserve(1)
+	request.PriceQuote = &q
 	request.UnitPriceCNY = &price
 	return request, nil
 }

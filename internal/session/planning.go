@@ -44,7 +44,7 @@ func (r *Runtime) planNext(ctx context.Context) bool {
 	world := r.session.World
 	r.mu.Unlock()
 
-	directionValue, err := r.director.Direct(ctx, director.Input{
+	directionValue, err := r.direct(ctx, director.Input{
 		Duration: r.config.SegmentDuration,
 		World:    world, StorySeed: r.config.StorySeed, Previous: previous, Position: end,
 		Audience: r.directorAudience(time.Now().UTC()),
@@ -68,7 +68,7 @@ func (r *Runtime) planNext(ctx context.Context) bool {
 		return false
 	}
 	r.mu.Lock()
-	if r.session == nil || len(r.session.Timeline.Segments) != sequence {
+	if r.session == nil || r.stopWanted || ctx.Err() != nil || len(r.session.Timeline.Segments) != sequence {
 		r.mu.Unlock()
 		return false
 	}
@@ -78,17 +78,19 @@ func (r *Runtime) planNext(ctx context.Context) bool {
 		return false
 	}
 	sessionID := r.session.ID
-	delete(r.directFails, sequence)
-	r.mu.Unlock()
 	if err := r.store.UpsertSegment(ctx, sessionID, segmentValue); err != nil {
+		r.session.Timeline.Segments = r.session.Timeline.Segments[:sequence]
+		r.mu.Unlock()
 		r.fail(ctx, fmt.Errorf("save planned segment: %w", err))
 		return false
 	}
+	delete(r.directFails, sequence)
+	r.mu.Unlock()
 	return true
 }
 
 func generationSpec(_ int, anchors map[string]string) generation.GenerationSpec {
-	base := generation.GenerationSpec{Resolution: "768P", Duration: 5 * time.Second, Mode: generation.ModeTextToVideo, Ratio: "16:9"}
+	base := generation.GenerationSpec{Duration: 5 * time.Second, Mode: generation.ModeTextToVideo, Ratio: "16:9"}
 	if anchor, ok := anchors["chat-live-start"]; ok {
 		base.Mode = generation.ModeFirstFrameToVideo
 		base.Ratio = "adaptive"

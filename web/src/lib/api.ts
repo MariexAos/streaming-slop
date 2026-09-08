@@ -2,7 +2,6 @@ import {
   apiErrorSchema,
   commandResponseSchema,
   opsSnapshotSchema,
-  generationConfigSchema,
   bilibiliConfigSchema,
   qwenConfigSchema,
   flowCatalogSchema,
@@ -11,7 +10,6 @@ import {
   sessionHistorySchema,
   type CommandResponse,
   type OpsSnapshot,
-  type GenerationConfig,
   type BilibiliConfig,
   type QwenConfig,
   type FlowCatalog,
@@ -41,27 +39,6 @@ export async function sendCommand(command: OpsCommand): Promise<CommandResponse>
     body: JSON.stringify(isFallback ? { forced: command === "enable-fallback" } : {}),
   })
   return parseResponse(response, (value) => commandResponseSchema.parse(value))
-}
-
-export async function fetchGenerationConfig(signal?: AbortSignal): Promise<GenerationConfig> {
-  const response = await fetch("/api/v1/config/generation", {
-    headers: { Accept: "application/json" },
-    signal,
-  })
-  return parseResponse(response, (value) => generationConfigSchema.parse(value))
-}
-
-export async function updateGenerationConfig(
-  config: Pick<GenerationConfig, "model" | "resolution" | "durationSeconds" | "ratio"> & {
-    apiKey?: string
-  },
-): Promise<GenerationConfig> {
-  const response = await fetch("/api/v1/config/generation", {
-    method: "PUT",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  })
-  return parseResponse(response, (value) => generationConfigSchema.parse(value))
 }
 
 export async function fetchBilibiliConfig(signal?: AbortSignal): Promise<BilibiliConfig> {

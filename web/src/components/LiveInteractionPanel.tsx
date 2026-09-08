@@ -4,15 +4,15 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function LiveInteractionPanel({
+  interactive,
   streamStatus,
-  previewUrl,
   saving,
   message,
   error,
   onSend,
 }: {
+  interactive: boolean
   streamStatus: string
-  previewUrl: string | null
   saving: boolean
   message: string | null
   error: string | null
@@ -38,98 +38,86 @@ export function LiveInteractionPanel({
         <CardHeader>
           <CardTitle className="inline-flex items-center gap-2">
             <Radio className="size-4 text-[var(--accent)]" />
-            画面预览
+            {streamStatus === "live" ? "实时直播" : "等待推流"}
           </CardTitle>
         </CardHeader>
         <CardContent>
           {streamStatus === "live" ? (
             <iframe
               title="MediaMTX 直播预览"
-              src="http://127.0.0.1:8888/live-test/?autoplay=true&muted=true&controls=true&playsinline=true"
+              src="/live-preview/?autoplay=true&muted=true&controls=true&playsinline=true"
               className="aspect-video w-full rounded-xl border border-[var(--line)] bg-black"
               allow="autoplay; fullscreen"
             />
-          ) : previewUrl ? (
-            <video
-              key={previewUrl}
-              src={previewUrl}
-              className="aspect-video w-full rounded-xl border border-[var(--line)] bg-black object-contain"
-              controls
-              autoPlay
-              muted
-              loop
-              playsInline
-            />
           ) : (
             <div className="relative aspect-video overflow-hidden rounded-xl border border-[var(--line)] bg-black">
-              <img
-                src="/anchorframes/chat-live-start.png"
-                alt="人物参考画面，非实时直播"
-                className="size-full object-cover"
-              />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-6 pb-5 pt-16 text-white">
                 <div>
                   <Radio className="size-5" />
                   <p className="mt-3 font-bold">{previewStatusLabel(streamStatus)}</p>
-                  <p className="mt-1 text-xs text-white/75">人物参考画面 · 首个片段就绪后可预览</p>
+                  <p className="mt-1 text-xs text-white/75">
+                    推流开始后显示直播画面，与 RTMP 输出同源
+                  </p>
                 </div>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="inline-flex items-center gap-2">
-            <MessageCircleMore className="size-4 text-[var(--accent)]" />
-            测试互动
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void send()
-            }}
-          >
-            <label className="block text-xs font-semibold text-[var(--text-muted)]">
-              昵称
-              <input
-                className={`${fieldClass} mt-2`}
-                value={username}
-                maxLength={40}
-                onChange={(event) => setUsername(event.target.value)}
-              />
-            </label>
-            <label className="block text-xs font-semibold text-[var(--text-muted)]">
-              弹幕内容
-              <input
-                className={`${fieldClass} mt-2`}
-                value={text}
-                maxLength={200}
-                onChange={(event) => setText(event.target.value)}
-                placeholder="例如：聊聊你桌上的东西"
-              />
-            </label>
-            <Button type="submit" variant="primary" disabled={saving || !text.trim()}>
-              <Send className="size-4" aria-hidden="true" />
-              {saving ? "发送中…" : "发送弹幕"}
-            </Button>
-          </form>
-          <div aria-live="polite" className="mt-3 min-h-10 text-xs leading-5">
-            {error ? (
-              <span className="text-rose-600">{error}</span>
-            ) : message ? (
-              <span className="text-emerald-600">{message}</span>
-            ) : (
-              <span className="text-[var(--text-dim)]">
-                发送后会在后续片段中体现，不会立即改变正在播放的画面。
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {interactive && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="inline-flex items-center gap-2">
+              <MessageCircleMore className="size-4 text-[var(--accent)]" />
+              测试互动
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void send()
+              }}
+            >
+              <label className="block text-xs font-semibold text-[var(--text-muted)]">
+                昵称
+                <input
+                  className={`${fieldClass} mt-2`}
+                  value={username}
+                  maxLength={40}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+              </label>
+              <label className="block text-xs font-semibold text-[var(--text-muted)]">
+                弹幕内容
+                <input
+                  className={`${fieldClass} mt-2`}
+                  value={text}
+                  maxLength={200}
+                  onChange={(event) => setText(event.target.value)}
+                  placeholder="例如：聊聊你桌上的东西"
+                />
+              </label>
+              <Button type="submit" variant="primary" disabled={saving || !text.trim()}>
+                <Send className="size-4" aria-hidden="true" />
+                {saving ? "发送中…" : "发送弹幕"}
+              </Button>
+            </form>
+            <div aria-live="polite" className="mt-3 min-h-10 text-xs leading-5">
+              {error ? (
+                <span className="text-rose-600">{error}</span>
+              ) : message ? (
+                <span className="text-emerald-600">{message}</span>
+              ) : (
+                <span className="text-[var(--text-dim)]">
+                  发送后会在后续片段中体现，不会立即改变正在播放的画面。
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </section>
   )
 }
@@ -137,5 +125,5 @@ export function LiveInteractionPanel({
 function previewStatusLabel(status: string) {
   if (status === "starting") return "正在准备直播画面"
   if (status === "failed") return "推流启动失败"
-  return "等待开播"
+  return "正在等待直播推流"
 }

@@ -25,16 +25,28 @@ type StreamState struct {
 	DroppedFrames int64  `json:"droppedFrames"`
 }
 
+type ModelSelection struct {
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+	Resolution string `json:"resolution,omitempty"`
+}
+type ModelSettings struct {
+	Video ModelSelection `json:"video"`
+	Text  ModelSelection `json:"text"`
+}
+
 type LiveSession struct {
-	Profile   *CharacterProfile `json:"profile,omitempty"`
-	ID        SessionID         `json:"id"`
-	Status    SessionStatus     `json:"status"`
-	World     WorldState        `json:"world"`
-	Timeline  Timeline          `json:"timeline"`
-	Stream    StreamState       `json:"stream"`
-	Version   int64             `json:"version"`
-	CreatedAt time.Time         `json:"createdAt"`
-	UpdatedAt time.Time         `json:"updatedAt"`
+	BudgetLimitMicros int64             `json:"budgetLimitMicros,omitempty"`
+	Models            *ModelSettings    `json:"models,omitempty"`
+	Profile           *CharacterProfile `json:"profile,omitempty"`
+	ID                SessionID         `json:"id"`
+	Status            SessionStatus     `json:"status"`
+	World             WorldState        `json:"world"`
+	Timeline          Timeline          `json:"timeline"`
+	Stream            StreamState       `json:"stream"`
+	Version           int64             `json:"version"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	UpdatedAt         time.Time         `json:"updatedAt"`
 }
 
 func NewSession(id SessionID, world WorldState, timeline Timeline, now time.Time) (LiveSession, error) {

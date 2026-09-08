@@ -28,3 +28,19 @@
 - 工程化：完整 `make go-verify` 通过；新增媒体与角色测试后集成验收再次通过。`make web-verify` 通过，包含 12 个单元测试和 8 个浏览器测试。未提交、未推送。
 
 真实生成吞吐、长时间人物稳定性、口型与语音一致性仍不应宣称达标。本轮按用户要求只验收本地 RTMP，不进行 Bilibili 推流。
+
+## 开播旅程与前端职责（2026-09-08）
+
+执行顺序：统一开播条件与阶段 → 就地配置和状态反馈 → 拆分表单与数据层 → 针对失败分支和刷新恢复验收。
+
+- `session/readiness` 定义开播规则；入口读取人物素材、凭据和账本。GET 展示检查结果，Start 再次检查。按启动缓冲视频费用下限判断额度，推理和语音仍由现有原子预占约束；不把下限描述为总价或可直播时长。
+- `lib/journey` 只做状态推导；`lib/readiness-api` 负责 HTTP 与 Zod 校验；`queries/journey` 管理请求、命令和失效更新。页面不复制服务端快照，SSE 与 HTTP 继续使用单调 revision。
+- `LivePreparation` 承载本场摘要与主操作；`LiveSessionControls` 管理停止及备用画面交互；`RuntimeDetails` 按需展示诊断。阻塞和运行异常保持可见。
+- `ConfigPage` 只组装人物、生成、弹幕和备用服务。独立表单保存草稿，远端状态由对应 Query hook 提供。组件不得直接依赖 API 模块，由 dependency-cruiser 检查。
+- 本地播放器改为同源 `/live-preview/`，由后端依据本地 RTMP 路径转发到 MediaMTX，避免局域网设备访问自己的 loopback。外部推流目标未配置本地播放器，不把参考图当作实时直播。
+
+质量取舍：保持 500 行非空非注释文件上限、类型检查、React Hooks 规则、无循环依赖及未使用代码检查；不新增框架或通用业务基类。行数是上限，拆分依据为状态所有权与真实职责，不为满足数字制造碎片。重点验证重复启动、不足额度、保存失败保留草稿、准备期停止和页面刷新恢复。
+
+依据：React《You Might Not Need an Effect》（https://react.dev/learn/you-might-not-need-an-effect）、TanStack Query Query Invalidation（https://tanstack.dev/query/latest/docs/framework/react/guides/query-invalidation）、Oxlint max-lines（https://oxc.rs/docs/guide/usage/linter/rules/eslint/max-lines）。
+
+本次验收：`make go-verify` 通过（含真实 PostgreSQL/FFmpeg 集成测试）；追加入口测试后 `go test -race ./cmd/live` 与 `make lint` 通过。最终 `make web-verify` 通过，包含 13 个单元测试和 12 个浏览器测试。浏览器实查待机页面、额度阻塞提示和原页配置展开/返回。未调用付费生成，未重新执行跨设备实时播放验收；尚未提交本次修改。

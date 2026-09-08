@@ -17,7 +17,11 @@ const historySummarySelect = `
 	SELECT ls.id::text, ls.status, ls.created_at, ls.updated_at,
 		(SELECT count(*) FROM segments s WHERE s.session_id = ls.id),
 		(SELECT count(*) FROM assets a WHERE a.session_id = ls.id AND a.source = 'generated'),
-		COALESCE((SELECT sum(ga.cost_cny) FROM generation_attempts ga WHERE ga.session_id = ls.id), 0)
+		CASE WHEN EXISTS(SELECT 1 FROM spending_limits WHERE id=ls.id::text)
+   THEN COALESCE((SELECT sum(charged_micros)::float8/1e6 FROM spending WHERE budget_id=ls.id::text),0)
+   ELSE COALESCE((SELECT sum(ga.cost_cny) FROM generation_attempts ga WHERE ga.session_id = ls.id), 0) END,
+  COALESCE((SELECT limit_micros FROM spending_limits WHERE id=ls.id::text),0),
+  COALESCE((SELECT sum(reserved_micros) FROM spending WHERE budget_id=ls.id::text AND charged_micros IS NULL),0)
 	FROM live_sessions ls`
 
 func (s *Store) ListSessionHistory(ctx context.Context) ([]session.HistorySummary, error) {
@@ -29,7 +33,7 @@ func (s *Store) ListSessionHistory(ctx context.Context) ([]session.HistorySummar
 	items := make([]session.HistorySummary, 0)
 	for rows.Next() {
 		var item session.HistorySummary
-		if err := rows.Scan(&item.ID, &item.Status, &item.StartedAt, &item.EndedAt, &item.SegmentTotal, &item.ReadyTotal, &item.CostCNY); err != nil {
+		if err := rows.Scan(&item.ID, &item.Status, &item.StartedAt, &item.EndedAt, &item.SegmentTotal, &item.ReadyTotal, &item.CostCNY, &item.BudgetLimitMicros, &item.ReservedMicros); err != nil {
 			return nil, fmt.Errorf("scan session history: %w", err)
 		}
 		items = append(items, item)
@@ -46,7 +50,7 @@ func (s *Store) SessionHistory(ctx context.Context, id string) (session.History,
 	}
 	if err := s.pool.QueryRow(ctx, historySummarySelect+` WHERE ls.id = $1`, id).Scan(
 		&result.Session.ID, &result.Session.Status, &result.Session.StartedAt, &result.Session.EndedAt,
-		&result.Session.SegmentTotal, &result.Session.ReadyTotal, &result.Session.CostCNY,
+		&result.Session.SegmentTotal, &result.Session.ReadyTotal, &result.Session.CostCNY, &result.Session.BudgetLimitMicros, &result.Session.ReservedMicros,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return session.History{}, session.ErrHistoryNotFound

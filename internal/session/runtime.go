@@ -41,9 +41,12 @@ type CharacterCatalog interface {
 }
 
 type RuntimeConfig struct {
+	BuildGeneration   func(context.Context, generation.Request) (generation.Request, error)
+	GeneratorFor      func(context.Context, generation.Request) (generation.Generator, error)
+	ResolveServices   func(context.Context, *live.LiveSession) (Services, error)
+	CheckStart        func(context.Context) error
 	Speech            streaming.Speech
 	Continuous        bool
-	Inspector         generation.Inspector
 	Frames            generation.FrameExtractor
 	Catalog           CharacterCatalog
 	Audience          *audience.Window
@@ -94,7 +97,10 @@ type Runtime struct {
 	lastGenErr       string
 	stopWanted       bool
 	directFails      map[int]int
+	replanning       map[live.SegmentID]bool
 	audienceRevision uint64
+	audiencePosition time.Duration
+	audienceError    string
 	lastObservation  audience.Observation
 	cancel           context.CancelFunc
 }
@@ -141,8 +147,15 @@ func (r *Runtime) Recover(ctx context.Context) error {
 		}
 		r.config.AnchorFrames = anchors
 	}
+	if active.Models == nil && len(attempts) > 0 {
+		first := attempts[0]
+		active.Models = &live.ModelSettings{Video: live.ModelSelection{Provider: first.Provider, Model: first.Request.Model, Resolution: first.Request.Spec.Resolution}, Text: live.ModelSelection{Provider: "minimax", Model: "MiniMax-M3"}}
+	}
+	if err := r.selectServices(ctx, active); err != nil {
+		return err
+	}
 	for _, attempt := range attempts {
-		if !attempt.Terminal() && attempt.Provider != r.config.Provider {
+		if r.config.GeneratorFor == nil && !attempt.Terminal() && attempt.Provider != r.config.Provider {
 			return fmt.Errorf("recover requires provider %s", attempt.Provider)
 		}
 	}
@@ -163,6 +176,11 @@ func (r *Runtime) Recover(ctx context.Context) error {
 }
 
 func (r *Runtime) Start(ctx context.Context) error {
+	if r.config.CheckStart != nil {
+		if err := r.config.CheckStart(ctx); err != nil {
+			return err
+		}
+	}
 	r.mu.Lock()
 	if r.cancel != nil || (r.session != nil && r.session.Status != live.SessionStopped && r.session.Status != live.SessionFailed) {
 		r.mu.Unlock()
@@ -184,6 +202,10 @@ func (r *Runtime) Start(ctx context.Context) error {
 		r.mu.Unlock()
 		return err
 	}
+	if err := r.selectServices(ctx, &created); err != nil {
+		r.mu.Unlock()
+		return err
+	}
 	created.Profile = profile
 	r.session = &created
 	r.attempts = nil
@@ -198,6 +220,9 @@ func (r *Runtime) Start(ctx context.Context) error {
 	r.stopWanted = false
 	r.directFails = make(map[int]int)
 	r.lastObservation = audience.Observation{}
+	r.audienceRevision = 0
+	r.audiencePosition = 0
+	r.audienceError = ""
 	r.mu.Unlock()
 
 	if err := r.store.CreateSession(ctx, &created); err != nil {
@@ -270,10 +295,8 @@ func (r *Runtime) run(ctx context.Context) {
 		case name := <-workers.done:
 			delete(workers.active, name)
 		case <-schedulerTicker.C:
-			workers.start(ctx, "planning", func(ctx context.Context) {
-				r.replanAudience(ctx, 4)
-				r.plan(ctx, 4)
-			})
+			workers.start(ctx, "audience", func(ctx context.Context) { r.replanAudience(ctx, 1) })
+			workers.start(ctx, "planning", func(ctx context.Context) { r.plan(ctx, 1) })
 			r.acknowledgePlayback(ctx)
 			r.commit()
 			r.updateFallback(ctx)

@@ -50,7 +50,7 @@ export function App() {
           className="mx-auto max-w-[1600px] space-y-5 px-4 py-6 sm:px-6 xl:px-8"
         >
           {view === "operations" ? (
-            <OperationsDashboard onConfigure={() => setView("config")} />
+            <OperationsDashboard onHistory={() => setView("history")} />
           ) : view === "flow" ? (
             <FlowPage />
           ) : view === "cost" ? (

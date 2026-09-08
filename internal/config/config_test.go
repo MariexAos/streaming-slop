@@ -31,7 +31,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.AnthropicModel != "claude-haiku-4-5-20251001" {
 		t.Fatalf("AnthropicModel = %q", cfg.AnthropicModel)
 	}
-	if cfg.MiniMaxModel != "MiniMax-H3-Max" || cfg.MiniMaxResolution != "768P" {
+	if cfg.MiniMaxModel != "MiniMax-H3-Max" || cfg.MiniMaxResolution != "480P" {
 		t.Fatalf("MiniMax defaults = %q/%q", cfg.MiniMaxModel, cfg.MiniMaxResolution)
 	}
 	if len(cfg.ReferenceImageURLs) != 2 {

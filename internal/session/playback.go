@@ -164,10 +164,9 @@ func (r *Runtime) updateFallback(ctx context.Context) {
 			reason = "operator"
 		}
 		r.activateFallbackLocked(reason)
-		sessionID := r.session.ID
-		segmentID, asset, cancelled := r.ensureFallbackSegmentLocked()
+		_, _, cancelled := r.ensureFallbackSegmentLocked(ctx)
 		r.mu.Unlock()
-		r.persistFallback(ctx, sessionID, segmentID, asset, cancelled)
+		r.cancelFallbackAttempts(ctx, cancelled)
 		return
 	}
 	if r.fallbackOn && ready >= r.config.FallbackExitReady {
@@ -187,7 +186,7 @@ func (r *Runtime) activateFallbackLocked(reason string) {
 	r.fallbackWhy = reason
 }
 
-func (r *Runtime) ensureFallbackSegmentLocked() (live.SegmentID, *live.VideoAsset, []generation.Attempt) {
+func (r *Runtime) ensureFallbackSegmentLocked(ctx context.Context) (live.SegmentID, *live.VideoAsset, []generation.Attempt) {
 	for i := range r.session.Timeline.Segments {
 		segmentValue := &r.session.Timeline.Segments[i]
 		if segmentValue.End <= r.session.Timeline.Playhead {
@@ -209,6 +208,10 @@ func (r *Runtime) ensureFallbackSegmentLocked() (live.SegmentID, *live.VideoAsse
 			Duration: r.fallback.Duration, Width: r.fallback.Width, Height: r.fallback.Height,
 			FPS: r.fallback.FrameRate, VerifiedAt: time.Now().UTC(),
 		}
+		if err := r.store.MarkFallbackReady(ctx, r.session.ID, segmentValue.ID, asset); err != nil {
+			r.lastGenErr = fmt.Sprintf("persist fallback segment: %v", err)
+			return "", nil, nil
+		}
 		if err := segmentValue.MarkReady(asset); err != nil {
 			return "", nil, cancelled
 		}
@@ -228,17 +231,17 @@ func (r *Runtime) ensureFallback(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) persistFallback(ctx context.Context, sessionID live.SessionID, segmentID live.SegmentID, asset *live.VideoAsset, cancelled []generation.Attempt) {
+func (r *Runtime) cancelFallbackAttempts(ctx context.Context, cancelled []generation.Attempt) {
 	for _, attempt := range cancelled {
 		if attempt.ProviderJobID != "" {
-			if err := r.generator.Cancel(ctx, attempt.ProviderJobID); err != nil {
+			client, err := r.generatorFor(ctx, attemptRequest(attempt))
+			if err != nil {
+				r.recordGenerationError(err)
+				continue
+			}
+			if err := client.Cancel(ctx, attempt.ProviderJobID); err != nil {
 				r.recordGenerationError(fmt.Errorf("cancel task %s: %w", attempt.ProviderJobID, err))
 			}
-		}
-	}
-	if asset != nil {
-		if err := r.store.MarkFallbackReady(ctx, sessionID, segmentID, *asset); err != nil {
-			r.fail(ctx, fmt.Errorf("persist fallback segment: %w", err))
 		}
 	}
 }

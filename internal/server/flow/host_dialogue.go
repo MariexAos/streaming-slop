@@ -10,7 +10,7 @@ const (
 func HostDialogueFlow() FlowDefinition {
 	nodes := []NodeDefinition{
 		{ID: "audience-window", Type: "audience_window", Label: "弹幕窗口"},
-		{ID: "multimodal-observer", Type: "multimodal_observer", Label: "多模态观察"},
+		{ID: "multimodal-observer", Type: "multimodal_observer", Label: "弹幕直达"},
 		{ID: "intent-cluster", Type: "intent_cluster", Label: "意图合并"},
 		{ID: "dialogue-director", Type: "dialogue_director", Label: "对话导演"},
 		{ID: "direction-plan", Type: "direction_plan", Label: "一分钟方向"},

@@ -19,12 +19,14 @@ type Director interface {
 
 // Input contains only the continuity facts needed for one direction decision.
 type Input struct {
-	Duration  time.Duration   `json:"-"`
-	World     live.WorldState `json:"world"`
-	StorySeed string          `json:"storySeed"`
-	Previous  *live.Direction `json:"previous,omitempty"`
-	Audience  *AudienceInput  `json:"audience,omitempty"`
-	Position  time.Duration   `json:"-"`
+	RecentDialogue []string        `json:"recentDialogue,omitempty"`
+	Guidance       string          `json:"guidance,omitempty"`
+	Duration       time.Duration   `json:"-"`
+	World          live.WorldState `json:"world"`
+	StorySeed      string          `json:"storySeed"`
+	Previous       *live.Direction `json:"previous,omitempty"`
+	Audience       *AudienceInput  `json:"audience,omitempty"`
+	Position       time.Duration   `json:"-"`
 }
 
 type AudienceInput struct {
@@ -37,20 +39,26 @@ type AudienceInput struct {
 
 func (in Input) MarshalJSON() ([]byte, error) {
 	type inputJSON struct {
+		RecentDialogue  []string        `json:"recentDialogue,omitempty"`
+		Guidance        string          `json:"guidance,omitempty"`
 		DurationSeconds float64         `json:"durationSeconds"`
 		World           live.WorldState `json:"world"`
 		StorySeed       string          `json:"storySeed"`
 		Previous        *live.Direction `json:"previous,omitempty"`
 		Audience        *AudienceInput  `json:"audience,omitempty"`
+		Focus           string          `json:"focus"`
 		PositionMS      int64           `json:"positionMs"`
 	}
 	return json.Marshal(inputJSON{
 		DurationSeconds: in.Duration.Seconds(),
+		RecentDialogue:  in.RecentDialogue,
+		Guidance:        in.Guidance,
 		World:           in.World,
 		StorySeed:       in.StorySeed,
 		Previous:        in.Previous,
 		Audience:        in.Audience,
 		PositionMS:      in.Position.Milliseconds(),
+		Focus:           conversationFocus(in.Position),
 	})
 }
 

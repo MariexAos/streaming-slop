@@ -7,11 +7,13 @@ import (
 )
 
 const (
+	FalAPIKey     = "fal_api_key"
 	MiniMaxAPIKey = "minimax_api_key"
 	QwenAPIKey    = "qwen_api_key"
 )
 
 type ProviderSecrets struct {
+	FalAPIKey     string
 	MiniMaxAPIKey string
 	QwenAPIKey    string
 }
@@ -30,6 +32,8 @@ func (s *Store) ProviderSecrets(ctx context.Context) (ProviderSecrets, error) {
 			return ProviderSecrets{}, fmt.Errorf("scan provider secret: %w", err)
 		}
 		switch name {
+		case FalAPIKey:
+			secrets.FalAPIKey = value
 		case MiniMaxAPIKey:
 			secrets.MiniMaxAPIKey = value
 		case QwenAPIKey:
@@ -43,7 +47,7 @@ func (s *Store) ProviderSecrets(ctx context.Context) (ProviderSecrets, error) {
 }
 
 func (s *Store) SaveProviderSecret(ctx context.Context, name, value string) error {
-	if name != MiniMaxAPIKey && name != QwenAPIKey {
+	if name != MiniMaxAPIKey && name != QwenAPIKey && name != FalAPIKey {
 		return fmt.Errorf("unknown provider secret %q", name)
 	}
 	value = strings.TrimSpace(value)

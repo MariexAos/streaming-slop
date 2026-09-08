@@ -14,8 +14,10 @@ import (
 )
 
 type runtimeConfig struct {
-	Profile         *live.CharacterProfile `json:"profile,omitempty"`
-	CommitHorizonMS int64                  `json:"commitHorizonMs"`
+	BudgetLimitMicros int64                  `json:"budgetLimitMicros,omitempty"`
+	Models            *live.ModelSettings    `json:"models,omitempty"`
+	Profile           *live.CharacterProfile `json:"profile,omitempty"`
+	CommitHorizonMS   int64                  `json:"commitHorizonMs"`
 }
 
 func (s *Store) CreateSession(ctx context.Context, session *live.LiveSession) error {
@@ -30,15 +32,25 @@ func (s *Store) CreateSession(ctx context.Context, session *live.LiveSession) er
 	if err != nil {
 		return fmt.Errorf("encode stream state: %w", err)
 	}
-	config, err := json.Marshal(runtimeConfig{Profile: session.Profile, CommitHorizonMS: session.Timeline.CommitHorizon.Milliseconds()})
+	config, err := json.Marshal(runtimeConfig{BudgetLimitMicros: session.BudgetLimitMicros, Models: session.Models, Profile: session.Profile, CommitHorizonMS: session.Timeline.CommitHorizon.Milliseconds()})
 	if err != nil {
 		return fmt.Errorf("encode runtime config: %w", err)
 	}
 	if session.Version == 0 {
 		session.Version = 1
 	}
-	_, err = s.pool.Exec(ctx, `
-		INSERT INTO live_sessions (
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if session.BudgetLimitMicros > 0 {
+		if _, err := tx.Exec(ctx, `INSERT INTO spending_limits(id,limit_micros) VALUES($1,$2)`, session.ID, session.BudgetLimitMicros); err != nil {
+			return fmt.Errorf("create session budget: %w", err)
+		}
+	}
+	_, err = tx.Exec(ctx, `
+  INSERT INTO live_sessions (
 			id, status, playhead_ms, world_state, runtime_config, stream_state,
 			version, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -48,7 +60,7 @@ func (s *Store) CreateSession(ctx context.Context, session *live.LiveSession) er
 	if err != nil {
 		return fmt.Errorf("create session %s: %w", session.ID, err)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *Store) UpdateSession(ctx context.Context, session *live.LiveSession) error {
@@ -85,7 +97,7 @@ func (s *Store) UpdateSession(ctx context.Context, session *live.LiveSession) er
 	if err != nil {
 		return fmt.Errorf("encode stream state: %w", err)
 	}
-	config, err := json.Marshal(runtimeConfig{Profile: session.Profile, CommitHorizonMS: session.Timeline.CommitHorizon.Milliseconds()})
+	config, err := json.Marshal(runtimeConfig{BudgetLimitMicros: session.BudgetLimitMicros, Models: session.Models, Profile: session.Profile, CommitHorizonMS: session.Timeline.CommitHorizon.Milliseconds()})
 	if err != nil {
 		return fmt.Errorf("encode runtime config: %w", err)
 	}
@@ -234,6 +246,8 @@ func scanSession(row scanner) (*live.LiveSession, error) {
 	if err := json.Unmarshal(stream, &session.Stream); err != nil {
 		return nil, fmt.Errorf("decode stream state: %w", err)
 	}
+	session.Models = runtime.Models
+	session.BudgetLimitMicros = runtime.BudgetLimitMicros
 	session.Profile = runtime.Profile
 	session.Timeline.Playhead = time.Duration(playheadMS) * time.Millisecond
 	session.Timeline.CommitHorizon = time.Duration(runtime.CommitHorizonMS) * time.Millisecond

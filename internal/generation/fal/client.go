@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ const (
 )
 
 type Config struct {
+	Resolution     string
 	APIKey         string
 	Model          string
 	BaseURL        string
@@ -32,6 +34,7 @@ type Config struct {
 }
 
 type Client struct {
+	resolution     string
 	apiKey         string
 	model          string
 	baseURL        string
@@ -66,7 +69,14 @@ func New(config Config) (*Client, error) {
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: config.RequestTimeout}
 	}
+	if config.Resolution == "" {
+		config.Resolution = "480P"
+	}
+	if config.Resolution != "480P" && config.Resolution != "768P" {
+		return nil, fmt.Errorf("fal resolution must be 480P or 768P")
+	}
 	return &Client{
+		resolution:     config.Resolution,
 		apiKey:         config.APIKey,
 		model:          strings.Trim(config.Model, "/"),
 		baseURL:        strings.TrimRight(config.BaseURL, "/"),
@@ -94,7 +104,7 @@ func (c *Client) Submit(ctx context.Context, generationRequest generation.Reques
 func (c *Client) Status(ctx context.Context, requestID string) (generation.Job, error) {
 	var response statusResponse
 	endpoint := c.requestURL(requestID) + "/status"
-	if err := c.doJSON(ctx, http.MethodGet, endpoint, nil, &response, http.StatusOK); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, endpoint, nil, &response, http.StatusOK, http.StatusAccepted); err != nil {
 		return generation.Job{}, fmt.Errorf("get fal status: %w", err)
 	}
 	job := generation.Job{
@@ -139,6 +149,12 @@ func (c *Client) Cancel(ctx context.Context, requestID string) error {
 	var response cancelResponse
 	err := c.doJSON(ctx, http.MethodPut, c.requestURL(requestID)+"/cancel", nil, &response, http.StatusAccepted)
 	if err != nil {
+		var responseError *apiError
+		if errors.As(err, &responseError) && responseError.Code == http.StatusBadRequest {
+			if json.Unmarshal(responseError.Body, &response) == nil && response.Status == "ALREADY_COMPLETED" {
+				return nil
+			}
+		}
 		return fmt.Errorf("cancel fal request: %w", err)
 	}
 	if response.Status != "CANCELLATION_REQUESTED" {
@@ -227,7 +243,7 @@ func (c *Client) doJSON(ctx context.Context, method, endpoint string, input, out
 	}
 	if !accepted {
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		return fmt.Errorf("returned %s: %s", resp.Status, strings.TrimSpace(string(message)))
+		return &apiError{Code: resp.StatusCode, Status: resp.Status, Body: message}
 	}
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes))
 	if err := decoder.Decode(output); err != nil {
@@ -305,3 +321,15 @@ type cancelResponse struct {
 }
 
 var _ generation.Generator = (*Client)(nil)
+
+// Retain status and body so endpoint-specific terminal outcomes can be handled
+// without swallowing unrelated HTTP failures.
+type apiError struct {
+	Code   int
+	Status string
+	Body   []byte
+}
+
+func (e *apiError) Error() string {
+	return fmt.Sprintf("returned %s: %s", e.Status, strings.TrimSpace(string(e.Body)))
+}

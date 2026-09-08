@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"streaming-agent/internal/character"
@@ -41,15 +40,7 @@ func managementHandler(catalog character.Catalog, store *store.Store, handler, u
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/characters", httpapi.CharacterHandler(catalog))
 	mux.Handle("/api/v1/characters/", httpapi.CharacterHandler(catalog))
-	mux.HandleFunc("GET /api/v1/budget", func(w http.ResponseWriter, r *http.Request) {
-		state, err := store.Spending(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(state)
-	})
+	mux.Handle("/api/v1/budget", budgetHandler(store))
 	mux.Handle("/api/v1/attempts/", unresolved)
 	mux.Handle("/", handler)
 	return mux

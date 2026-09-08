@@ -1,55 +1,21 @@
 import { useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  attachJob,
-  fetchBudget,
-  fetchCharacter,
-  fetchCharacters,
-  fetchUnresolved,
-  publishCharacter,
-  selectCharacter,
-} from "@/lib/characters"
+import { useCharacterManagement } from "@/queries/characters"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
 
 export function CharacterPanel() {
-  const client = useQueryClient()
-  const current = useQuery({ queryKey: ["character"], queryFn: fetchCharacter })
-  const versions = useQuery({ queryKey: ["characters"], queryFn: fetchCharacters })
-  const budget = useQuery({ queryKey: ["budget"], queryFn: fetchBudget, refetchInterval: 5000 })
-  const pending = useQuery({
-    queryKey: ["unresolved"],
-    queryFn: fetchUnresolved,
-    refetchInterval: 5000,
-  })
+  const { current, versions, budget, pending, select, upload, attach, error } =
+    useCharacterManagement()
   const [first, setFirst] = useState<File>()
   const [last, setLast] = useState<File>()
   const [voice, setVoice] = useState<string>()
   const [description, setDescription] = useState<string>()
   const [jobs, setJobs] = useState<Record<string, string>>({})
-  const refresh = async () => {
-    await Promise.all([
-      client.invalidateQueries({ queryKey: ["characters"] }),
-      client.invalidateQueries({ queryKey: ["character"] }),
-      client.invalidateQueries({ queryKey: ["unresolved"] }),
-    ])
-  }
-  const select = useMutation({ mutationFn: selectCharacter, onSuccess: refresh })
-  const upload = useMutation({ mutationFn: publishCharacter, onSuccess: refresh })
-  const attach = useMutation({ mutationFn: attachJob, onSuccess: refresh })
-  const error =
-    select.error ??
-    upload.error ??
-    attach.error ??
-    current.error ??
-    versions.error ??
-    budget.error ??
-    pending.error
   const profile = current.data
   return (
     <Card>
       <CardHeader>
-        <CardTitle>人物与运行额度</CardTitle>
+        <CardTitle>人物与任务</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-[var(--text-muted)]">
@@ -145,7 +111,15 @@ export function CharacterPanel() {
                   保存新版本
                 </Button>
                 {upload.isSuccess && (
-                  <p role="status">新版本已保存，可在上方选择。当前直播继续使用原版本。</p>
+                  <div>
+                    <p role="status">新版本已保存，当前直播继续使用原版本。</p>
+                    <Button
+                      disabled={select.isPending}
+                      onClick={() => upload.data && select.mutate(upload.data.id)}
+                    >
+                      用于下一场直播
+                    </Button>
+                  </div>
                 )}
               </div>
             </details>
@@ -153,7 +127,8 @@ export function CharacterPanel() {
         )}
         {budget.data && (
           <p>
-            总额度 ¥{(budget.data.limitMicros / 1e6).toFixed(2)} · 已结算 ¥
+            {budget.data.sessionId ? "本场额度" : "下场预算"} ¥
+            {(budget.data.limitMicros / 1e6).toFixed(2)} · 已结算 ¥
             {(budget.data.chargedMicros / 1e6).toFixed(4)} · 在途预占 ¥
             {(budget.data.reservedMicros / 1e6).toFixed(4)}
           </p>

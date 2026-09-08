@@ -40,16 +40,23 @@ func (s *Store) ClosedAttempts(ctx context.Context) ([]generation.Pending, error
 	return result, nil
 }
 func (s *Store) SettleAttempt(ctx context.Context, id live.SessionID, a generation.Attempt, status generation.JobStatus, cost *float64) error {
-	if cost == nil {
+	if cost == nil && (a.Provider != "fal" || status != generation.JobCompleted) {
 		return fmt.Errorf("missing actual cost")
 	}
-	if err := s.Settle(ctx, string(a.ID), generation.Micros(*cost)); err != nil {
-		return err
+	// Completion and billing are independent for fal. Keep the reservation
+	// until an actual invoice amount is supplied, just as during live playback.
+	if cost != nil {
+		if err := s.Settle(ctx, string(a.ID), generation.Micros(*cost)); err != nil {
+			return err
+		}
 	}
 	a.CostCNY = cost
 	now := time.Now().UTC()
 	switch status {
 	case generation.JobCompleted:
+		if a.Status == generation.AttemptSucceeded {
+			return s.UpdateAttempt(ctx, id, &a)
+		}
 		for _, next := range []generation.AttemptStatus{generation.AttemptSubmitted, generation.AttemptRunning, generation.AttemptPreparing, generation.AttemptSucceeded} {
 			current := a
 			if err := a.Transition(next, now); err != nil {

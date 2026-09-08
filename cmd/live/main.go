@@ -22,9 +22,10 @@ import (
 	"streaming-agent/internal/config"
 	"streaming-agent/internal/generation"
 	"streaming-agent/internal/generation/minimax"
-	minimaxInference "streaming-agent/internal/inference/minimax"
 	"streaming-agent/internal/inference/qwen"
+	"streaming-agent/internal/live"
 	"streaming-agent/internal/monitoring"
+	"streaming-agent/internal/pricing"
 	httpapi "streaming-agent/internal/server"
 	"streaming-agent/internal/server/webui"
 	"streaming-agent/internal/session"
@@ -66,14 +67,13 @@ func run() error {
 		return err
 	}
 
-	if err := store.ConfigureBudget(rootCtx, 10_000_000); err != nil {
+	if err := store.ConfigureSessionBudgets(rootCtx, 10_000_000); err != nil {
 		return err
 	}
 	catalog, err := configureCharacter(rootCtx, store, cfg)
 	if err != nil {
 		return err
 	}
-	qwenClient := configureQwen(cfg)
 	generatorClient, err := configureMiniMax(cfg)
 	if err != nil {
 		return err
@@ -83,14 +83,14 @@ func run() error {
 		return err
 	}
 	producer = generation.Budgeted{Generator: producer, Budget: store}
-	startReconciliation(rootCtx, store, producer, cfg.GenerationProvider)
+	services := modelServicesController{store: store, cfg: cfg}
+	startReconciliation(rootCtx, store, services.resolveAttempt)
 	output, preparer, err := configureMedia(cfg)
 	if err != nil {
 		return err
 	}
 
-	m3 := minimaxInference.New(cfg.MiniMaxAPIKey, store)
-	scheduler := configureScheduler(cfg)
+	m3, generationController := configureInference(cfg.MiniMaxAPIKey, store, generationController)
 
 	registry := prometheus.NewRegistry()
 	metrics := monitoring.NewMetrics(registry)
@@ -100,34 +100,43 @@ func run() error {
 		return err
 	}
 	defer bilibiliManager.Close()
+	readiness := readinessReader{services: &services, catalog: catalog, store: store, generator: generationController, cfg: cfg, inference: m3}
 	runtime := session.NewRuntime(session.RuntimeConfig{
-		Speech: m3, Continuous: true, Inspector: m3, Frames: preparer, Catalog: catalog, Audience: audienceWindow, Observer: m3,
+		BuildGeneration: services.BuildGeneration, GeneratorFor: services.GeneratorFor, ResolveServices: services.Resolve, CheckStart: readiness.check, Speech: m3, Continuous: false, Frames: preparer, Catalog: catalog, Audience: audienceWindow, Observer: m3,
 		StorySeed: cfg.StorySeed, Character: cfg.Character, AnchorFrames: anchorFrames(),
 		SegmentDuration: cfg.SegmentDuration, CommitHorizon: cfg.CommitHorizon,
 		ReadyTarget: cfg.ReadyTarget, SubmittedTarget: cfg.SubmittedTarget,
 		PlannedHorizon: cfg.PlannedHorizon, SchedulerInterval: cfg.SchedulerInterval,
 		PollInterval: cfg.GenerationPoll, FallbackExitReady: cfg.FallbackExitReady,
 		DataDir: filepath.Clean(cfg.DataDir), Provider: cfg.GenerationProvider,
-	}, store, m3, producer, preparer, output, scheduler, hub, metrics, slog.Default())
+	}, store, m3, producer, preparer, output, configureScheduler(cfg), hub, metrics, slog.Default())
 	if err := runtime.Recover(rootCtx); err != nil {
 		return err
 	}
 
-	handler := httpapi.New(
+	var handler http.Handler = httpapi.New(
 		runtime, hub, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), webui.NewHandler(),
-		generationController, bilibiliConfigController{manager: bilibiliManager, audience: audienceWindow},
-		qwenConfigController{client: qwenClient, store: store},
+		generationController, bilibiliConfigController{manager: bilibiliManager, audience: audienceWindow, runtime: runtime},
+		qwenConfigController{client: configureQwen(cfg), store: store},
 	)
-	return serve(rootCtx, managementHandler(catalog, store, handler, unresolvedHandler(store, runtime, producer, cfg.GenerationProvider)), runtime)
+	handler = httpapi.ModelServicesHandler(modelServicesController{store: store, cfg: cfg}, handler)
+	return serveGuests(rootCtx, readiness.handler(managementHandler(catalog, store, handler, unresolvedHandler(store, runtime, services.resolveAttempt))), hub, bilibiliConfigController{manager: bilibiliManager, audience: audienceWindow, runtime: runtime})
 }
 
-func serve(rootCtx context.Context, handler http.Handler, runtime *session.Runtime) error {
+func serve(rootCtx context.Context, handler, guest http.Handler, runtime *session.Runtime) error {
 	server := &http.Server{
 		Addr: config.HTTPAddr, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second,
 	}
 
-	serverErrors := make(chan error, 1)
+	guestServer := &http.Server{Addr: "0.0.0.0:8082", Handler: guest, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	defer func() { _ = guestServer.Close() }()
+	defer func() { _ = server.Close() }()
+	serverErrors := make(chan error, 2)
+	go func() {
+		slog.Info("guest livestream listening", "address", guestServer.Addr)
+		serverErrors <- guestServer.ListenAndServe()
+	}()
 	go func() {
 		slog.Info("operations console listening", "address", config.HTTPAddr)
 		serverErrors <- server.ListenAndServe()
@@ -138,6 +147,7 @@ func serve(rootCtx context.Context, handler http.Handler, runtime *session.Runti
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = runtime.Stop(shutdownCtx)
+		_ = guestServer.Shutdown(shutdownCtx)
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
@@ -193,6 +203,7 @@ func (c qwenConfigController) UpdateQwenConfig(ctx context.Context, update httpa
 }
 
 type bilibiliConfigController struct {
+	runtime  *session.Runtime
 	manager  *bilibili.Manager
 	audience *audience.Window
 }
@@ -209,6 +220,10 @@ func (c bilibiliConfigController) UpdateBilibiliConfig(_ context.Context, update
 }
 
 func (c bilibiliConfigController) InjectMockDanmaku(_ context.Context, message httpapi.MockDanmaku) error {
+	view := c.runtime.View()
+	if view.Session == nil || (view.Session.Status != live.SessionRunning && view.Session.Status != live.SessionBuffering) {
+		return errors.New("直播未运行，无法提交互动")
+	}
 	text := strings.TrimSpace(message.Text)
 	if text == "" {
 		return errors.New("mock danmaku text is required")
@@ -261,11 +276,13 @@ func (c generationConfigController) UpdateGenerationConfig(ctx context.Context, 
 }
 
 func (c generationConfigController) project(settings minimax.Settings) (httpapi.GenerationConfig, error) {
-	price, err := minimax.UnitPriceCNY(settings.Model, settings.Resolution)
+	q, err := pricing.Lookup("minimax", settings.Model, settings.Resolution, time.Now())
 	if err != nil {
 		return httpapi.GenerationConfig{}, err
 	}
+	price := q.Reserve(1)
 	return httpapi.GenerationConfig{
+		Pricing:  &q,
 		Provider: "MiniMax", BaseURL: c.client.BaseURL(), Model: settings.Model,
 		Resolution: settings.Resolution, DurationSeconds: settings.Duration,
 		Ratio: settings.Ratio, APIKeyConfigured: c.client.APIKeyConfigured(),
@@ -281,8 +298,11 @@ func loadProviderSecrets(rootCtx context.Context, store *postgresstore.Store, cf
 	if cfg.QwenAPIKey == "" {
 		cfg.QwenAPIKey = secrets.QwenAPIKey
 	}
-	if cfg.MiniMaxAPIKey == "" {
+	if secrets.MiniMaxAPIKey != "" {
 		cfg.MiniMaxAPIKey = secrets.MiniMaxAPIKey
+	}
+	if secrets.FalAPIKey != "" {
+		cfg.FalAPIKey = secrets.FalAPIKey
 	}
 
 	return nil

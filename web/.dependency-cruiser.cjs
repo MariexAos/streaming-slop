@@ -1,5 +1,14 @@
 module.exports = {
   forbidden: [
+    {
+      name: "pages-use-query-layer-for-requests",
+      severity: "error",
+      from: { path: "^src/components/" },
+      to: {
+        path: "^src/lib/(api|characters|readiness-api)\\.ts$",
+        dependencyTypesNot: ["type-only"],
+      },
+    },
     { name: "no-cycles", severity: "error", from: {}, to: { circular: true } },
     { name: "no-unresolved", severity: "error", from: {}, to: { couldNotResolve: true } },
     {

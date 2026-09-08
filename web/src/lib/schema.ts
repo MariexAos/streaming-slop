@@ -29,6 +29,7 @@ const streamStatusSchema = z.enum(["stopped", "starting", "live", "recovering", 
 
 export const opsSnapshotSchema = z
   .object({
+    interaction: z.string().optional(),
     revision: z.number().int().nonnegative(),
     observedAt: z.string().datetime({ offset: true }),
     session: z
@@ -124,7 +125,33 @@ export const apiErrorSchema = z
   })
   .strict()
 
-export const generationConfigSchema = z
+export const pricingSchema = z
+  .object({
+    provider: z.string(),
+    model: z.string(),
+    variant: z.string(),
+    billingUnit: z.enum(["output_second", "input_token", "output_token", "speech_character"]),
+    unitQuantity: z.number().int().positive(),
+    currency: z.string(),
+    standardPrice: nonNegative,
+    promotion: z
+      .object({ price: nonNegative, expiresAt: z.string().datetime().nullable(), note: z.string() })
+      .strict()
+      .nullable(),
+    reserveAt: z.enum(["standard", "effective"]),
+    source: z.string().url(),
+    version: z.string(),
+    quotedAt: z.string().datetime({ offset: true }),
+    exchangeRateToCny: z.number().positive(),
+    exchangeRateAsOf: z.string(),
+    promotionActive: z.boolean(),
+    standardCny: nonNegative,
+    estimatedCny: nonNegative,
+    reserveCny: nonNegative,
+  })
+  .strict()
+
+const generationConfigSchema = z
   .object({
     provider: z.string().min(1),
     baseUrl: z.string().url(),
@@ -134,11 +161,12 @@ export const generationConfigSchema = z
       "minimax/h3-max/image-to-video",
       "minimax/h3-max-turbo/image-to-video",
     ]),
-    resolution: z.literal("768P"),
+    resolution: z.enum(["480P", "768P"]),
     durationSeconds: z.number().int().min(5).max(15),
     ratio: z.enum(["16:9", "adaptive"]),
     apiKeyConfigured: z.boolean(),
     unitPriceCnyPerSecond: nonNegative.nullable(),
+    pricing: pricingSchema.optional(),
   })
   .strict()
 
@@ -259,6 +287,8 @@ const historySummarySchema = z
     segmentTotal: z.number().int().nonnegative(),
     readyTotal: z.number().int().nonnegative(),
     costCny: nonNegative,
+    budgetLimitMicros: nonNegative.optional(),
+    reservedMicros: nonNegative.optional(),
   })
   .strict()
 

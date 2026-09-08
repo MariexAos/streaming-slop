@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"streaming-agent/internal/monitoring"
+	"streaming-agent/internal/pricing"
 	"streaming-agent/internal/server/flow"
 	"streaming-agent/internal/session"
 )
@@ -35,14 +36,15 @@ type HistoryController interface {
 }
 
 type GenerationConfig struct {
-	Provider              string   `json:"provider"`
-	BaseURL               string   `json:"baseUrl"`
-	Model                 string   `json:"model"`
-	Resolution            string   `json:"resolution"`
-	DurationSeconds       int      `json:"durationSeconds"`
-	Ratio                 string   `json:"ratio"`
-	APIKeyConfigured      bool     `json:"apiKeyConfigured"`
-	UnitPriceCNYPerSecond *float64 `json:"unitPriceCnyPerSecond"`
+	Pricing               *pricing.Quote `json:"pricing,omitempty"`
+	Provider              string         `json:"provider"`
+	BaseURL               string         `json:"baseUrl"`
+	Model                 string         `json:"model"`
+	Resolution            string         `json:"resolution"`
+	DurationSeconds       int            `json:"durationSeconds"`
+	Ratio                 string         `json:"ratio"`
+	APIKeyConfigured      bool           `json:"apiKeyConfigured"`
+	UnitPriceCNYPerSecond *float64       `json:"unitPriceCnyPerSecond"`
 }
 
 type GenerationConfigUpdate struct {

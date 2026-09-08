@@ -95,7 +95,11 @@ func generateNext(ctx context.Context, s *store.Store, m3 *inference.Client, key
 	return awaitResult(ctx, client, request, job.ID, out)
 }
 func awaitResult(ctx context.Context, c generation.Budgeted, request generation.Request, id, out string) (string, error) {
-	ticker := time.NewTicker(5 * time.Second)
+	return awaitResultEvery(ctx, c, request, id, out, 5*time.Second)
+}
+
+func awaitResultEvery(ctx context.Context, c generation.Budgeted, request generation.Request, id, out string, interval time.Duration) (string, error) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {

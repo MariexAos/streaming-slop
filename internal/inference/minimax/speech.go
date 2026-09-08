@@ -9,19 +9,24 @@ import (
 	"time"
 
 	"streaming-agent/internal/generation"
+	"streaming-agent/internal/pricing"
 
 	"github.com/google/uuid"
 )
 
 func (c *Client) Synthesize(ctx context.Context, text, voice string, maxDuration time.Duration) ([]byte, error) {
-	if c.APIKey == "" || strings.TrimSpace(voice) == "" || strings.TrimSpace(text) == "" {
+	if c.key() == "" || strings.TrimSpace(voice) == "" || strings.TrimSpace(text) == "" {
 		return nil, errors.New("speech requires key, voice and text")
 	}
 	if len(text) > 2000 {
 		return nil, errors.New("livestream dialogue too long")
 	}
+	rate, err := pricing.Lookup("minimax", "speech-2.8-turbo", "standard", time.Now())
+	if err != nil {
+		return nil, err
+	}
 	id := "speech:" + uuid.NewString()
-	if err := c.Budget.Reserve(ctx, id, generation.Micros(float64(len(text)*2)*2/10000)); err != nil {
+	if err := c.Budget.Reserve(ctx, id, generation.Micros(rate.Reserve(float64(len(text)*2)))); err != nil {
 		return nil, err
 	}
 	body := map[string]any{"model": "speech-2.8-turbo", "text": text, "stream": false, "output_format": "hex",
@@ -53,7 +58,7 @@ func (c *Client) Synthesize(ctx context.Context, text, voice string, maxDuration
 	if response.Extra.Characters <= 0 {
 		return nil, errors.New("speech usage missing")
 	}
-	if err := c.Budget.Settle(ctx, id, generation.Micros(float64(response.Extra.Characters)*2/10000)); err != nil {
+	if err := c.Budget.Settle(ctx, id, generation.Micros(rate.Estimate(float64(response.Extra.Characters)))); err != nil {
 		return nil, err
 	}
 	if time.Duration(response.Extra.Length)*time.Millisecond > maxDuration {

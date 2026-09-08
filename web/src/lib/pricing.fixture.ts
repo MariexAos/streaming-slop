@@ -1,0 +1,36 @@
+import type { GenerationConfig } from "./schema"
+
+export const turboConfigFixture: GenerationConfig = {
+  provider: "fal",
+  baseUrl: "https://queue.fal.run",
+  model: "minimax/h3-max-turbo/image-to-video",
+  resolution: "480P",
+  durationSeconds: 5,
+  ratio: "adaptive",
+  apiKeyConfigured: true,
+  unitPriceCnyPerSecond: 0.0419375,
+  pricing: {
+    provider: "fal",
+    model: "minimax/h3-max-turbo/image-to-video",
+    variant: "480P",
+    billingUnit: "output_second",
+    unitQuantity: 1,
+    currency: "USD",
+    standardPrice: 0.025,
+    promotion: {
+      price: 0.00625,
+      expiresAt: "2026-09-14T00:00:00Z",
+      note: "官网仅公布9月14日结束；UTC零点是估算切换时间，非官方精确截止时刻。预算按有效价格预留，实际以账单为准。",
+    },
+    reserveAt: "effective",
+    source: "https://fal.ai/models/minimax/h3-max-turbo/image-to-video",
+    version: "2026-09-08",
+    quotedAt: "2026-09-08T00:00:00Z",
+    exchangeRateToCny: 6.71,
+    exchangeRateAsOf: "2026-09-08; USD/CNY预算估值，非支付汇率",
+    promotionActive: true,
+    standardCny: 0.16775,
+    estimatedCny: 0.0419375,
+    reserveCny: 0.0419375,
+  },
+}

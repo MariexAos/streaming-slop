@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func unresolvedHandler(s *store.Store, runtime *session.Runtime, client generation.Generator, provider string) http.Handler {
+func unresolvedHandler(s *store.Store, runtime *session.Runtime, resolve func(context.Context, generation.Attempt) (generation.Generator, error)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/attempts/unresolved", func(w http.ResponseWriter, r *http.Request) {
 		pending, err := s.UnresolvedAttempts(r.Context())
@@ -36,7 +36,7 @@ func unresolvedHandler(s *store.Store, runtime *session.Runtime, client generati
 			http.Error(w, "invalid input", 400)
 			return
 		}
-		err := attachUnresolved(r.Context(), s, runtime, client, provider, live.AttemptID(r.PathValue("id")), input.JobID)
+		err := attachUnresolved(r.Context(), s, runtime, resolve, live.AttemptID(r.PathValue("id")), input.JobID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
@@ -45,7 +45,7 @@ func unresolvedHandler(s *store.Store, runtime *session.Runtime, client generati
 	})
 	return mux
 }
-func attachUnresolved(ctx context.Context, s *store.Store, runtime *session.Runtime, c generation.Generator, provider string, id live.AttemptID, jobID string) error {
+func attachUnresolved(ctx context.Context, s *store.Store, runtime *session.Runtime, resolve func(context.Context, generation.Attempt) (generation.Generator, error), id live.AttemptID, jobID string) error {
 	if jobID == "" {
 		return errors.New("task id required")
 	}
@@ -63,8 +63,12 @@ func attachUnresolved(ctx context.Context, s *store.Store, runtime *session.Runt
 		if a.ID != id {
 			continue
 		}
-		if a.Provider != provider || a.Status != generation.AttemptPendingSubmit || a.ProviderJobID != "" {
+		if a.Status != generation.AttemptPendingSubmit || a.ProviderJobID != "" {
 			return errors.New("attempt not eligible for binding")
+		}
+		c, err := resolve(ctx, a)
+		if err != nil {
+			return err
 		}
 		if _, err = c.Status(ctx, jobID); err != nil {
 			return err

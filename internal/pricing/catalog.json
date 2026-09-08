@@ -1,0 +1,126 @@
+{
+  "version": "2026-09-08-effective",
+  "exchangeRatesToCny": {
+    "CNY": 1,
+    "USD": 6.71
+  },
+  "exchangeRateAsOf": "2026-09-08; USD/CNY预算估值，非支付汇率",
+  "rates": [
+    {
+      "provider": "minimax",
+      "model": "MiniMax-H3-Max",
+      "variant": "480P",
+      "billingUnit": "output_second",
+      "unitQuantity": 1,
+      "currency": "CNY",
+      "standardPrice": 0.33,
+      "promotion": null,
+      "reserveAt": "effective",
+      "source": "https://platform.minimaxi.com/docs/guides/pricing-paygo"
+    },
+    {
+      "provider": "minimax",
+      "model": "MiniMax-H3-Max",
+      "variant": "768P",
+      "billingUnit": "output_second",
+      "unitQuantity": 1,
+      "currency": "CNY",
+      "standardPrice": 0.5,
+      "promotion": null,
+      "reserveAt": "effective",
+      "source": "https://platform.minimaxi.com/docs/guides/pricing-paygo"
+    },
+    {
+      "provider": "fal",
+      "model": "minimax/h3-max-turbo/image-to-video",
+      "variant": "480P",
+      "billingUnit": "output_second",
+      "unitQuantity": 1,
+      "currency": "USD",
+      "standardPrice": 0.025,
+      "promotion": {
+        "price": 0.00625,
+        "expiresAt": "2026-09-14T00:00:00Z",
+        "note": "官网仅公布9月14日结束；UTC零点是估算切换时间，非官方精确截止时刻。预算按有效价格预留，优惠到期恢复标准价，实际以账单为准。"
+      },
+      "reserveAt": "effective",
+      "source": "https://fal.ai/models/minimax/h3-max-turbo/image-to-video"
+    },
+    {
+      "provider": "fal",
+      "model": "minimax/h3-max-turbo/image-to-video",
+      "variant": "768P",
+      "billingUnit": "output_second",
+      "unitQuantity": 1,
+      "currency": "USD",
+      "standardPrice": 0.04,
+      "promotion": {
+        "price": 0.01,
+        "expiresAt": "2026-09-14T00:00:00Z",
+        "note": "官网仅公布9月14日结束；UTC零点是估算切换时间，非官方精确截止时刻。预算按有效价格预留，优惠到期恢复标准价，实际以账单为准。"
+      },
+      "reserveAt": "effective",
+      "source": "https://fal.ai/models/minimax/h3-max-turbo/image-to-video"
+    },
+    {
+      "provider": "fal",
+      "model": "minimax/h3-max-turbo/image-to-video",
+      "variant": "1080P",
+      "billingUnit": "output_second",
+      "unitQuantity": 1,
+      "currency": "USD",
+      "standardPrice": 0.08,
+      "promotion": {
+        "price": 0.02,
+        "expiresAt": "2026-09-14T00:00:00Z",
+        "note": "官网仅公布9月14日结束；UTC零点是估算切换时间，非官方精确截止时刻。预算按有效价格预留，优惠到期恢复标准价，实际以账单为准。"
+      },
+      "reserveAt": "effective",
+      "source": "https://fal.ai/models/minimax/h3-max-turbo/image-to-video"
+    },
+    {
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "variant": "standard-input-up-to-512k",
+      "billingUnit": "input_token",
+      "unitQuantity": 1000000,
+      "currency": "CNY",
+      "standardPrice": 4.2,
+      "promotion": {
+        "price": 2.1,
+        "expiresAt": null,
+        "note": "标准服务，输入上下文不超过512k，官方永久五折。"
+      },
+      "reserveAt": "effective",
+      "source": "https://platform.minimaxi.com/docs/guides/pricing-paygo"
+    },
+    {
+      "provider": "minimax",
+      "model": "MiniMax-M3",
+      "variant": "standard-output-up-to-512k",
+      "billingUnit": "output_token",
+      "unitQuantity": 1000000,
+      "currency": "CNY",
+      "standardPrice": 16.8,
+      "promotion": {
+        "price": 8.4,
+        "expiresAt": null,
+        "note": "标准服务，输入上下文不超过512k，官方永久五折。"
+      },
+      "reserveAt": "effective",
+      "source": "https://platform.minimaxi.com/docs/guides/pricing-paygo"
+    },
+    {
+      "provider": "minimax",
+      "model": "speech-2.8-turbo",
+      "variant": "standard",
+      "billingUnit": "speech_character",
+      "unitQuantity": 10000,
+      "currency": "CNY",
+      "standardPrice": 2,
+      "promotion": null,
+      "reserveAt": "effective",
+      "source": "https://platform.minimaxi.com/docs/guides/pricing-paygo"
+    }
+  ]
+}

@@ -9,14 +9,17 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"streaming-agent/internal/generation"
+	"streaming-agent/internal/pricing"
 
 	"github.com/google/uuid"
 )
 
 type Client struct {
+	keyMu   sync.RWMutex
 	APIKey  string
 	BaseURL string
 	HTTP    *http.Client
@@ -45,7 +48,7 @@ type request struct {
 }
 
 func (c *Client) complete(ctx context.Context, instruction string, parts []Part) ([]byte, error) {
-	if c.APIKey == "" {
+	if c.key() == "" {
 		return nil, errors.New("MiniMax API key required")
 	}
 	body := request{Model: "MiniMax-M3", System: instruction, Messages: []message{{Role: "user", Content: parts}}}
@@ -59,8 +62,15 @@ func (c *Client) complete(ctx context.Context, instruction string, parts []Part)
 		return nil, errors.New("invalid or excessive input token count")
 	}
 	id := "m3:" + uuid.NewString()
-	// Standard M3: CNY 2.10/M input + 8.40/M output. Reserve output ceiling.
-	quote := generation.Micros(float64(count.InputTokens)*2.1/1e6 + 1024*8.4/1e6)
+	inputPrice, err := pricing.Lookup("minimax", body.Model, "standard-input-up-to-512k", time.Now())
+	if err != nil {
+		return nil, err
+	}
+	outputPrice, err := pricing.Lookup("minimax", body.Model, "standard-output-up-to-512k", time.Now())
+	if err != nil {
+		return nil, err
+	}
+	quote := generation.Micros(inputPrice.Reserve(float64(count.InputTokens)) + outputPrice.Reserve(1024))
 	if err := c.Budget.Reserve(ctx, id, quote); err != nil {
 		return nil, err
 	}
@@ -77,7 +87,7 @@ func (c *Client) complete(ctx context.Context, instruction string, parts []Part)
 	if err := c.post(ctx, "/anthropic/v1/messages", body, &response); err != nil {
 		return nil, err
 	}
-	cost := generation.Micros(float64(response.Usage.Input)*2.1/1e6 + float64(response.Usage.Output)*8.4/1e6)
+	cost := generation.Micros(inputPrice.Estimate(float64(response.Usage.Input)) + outputPrice.Estimate(float64(response.Usage.Output)))
 	if err := c.Budget.Settle(ctx, id, cost); err != nil {
 		return nil, err
 	}
@@ -100,7 +110,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Authorization", "Bearer "+c.key())
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.HTTP.Do(req)
 	if err != nil {
@@ -112,3 +122,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 2<<20)).Decode(out)
 }
+
+func (c *Client) UpdateAPIKey(key string) { c.keyMu.Lock(); defer c.keyMu.Unlock(); c.APIKey = key }
+func (c *Client) key() string             { c.keyMu.RLock(); defer c.keyMu.RUnlock(); return c.APIKey }
+func (c *Client) CredentialSaved() bool   { return c.key() != "" }

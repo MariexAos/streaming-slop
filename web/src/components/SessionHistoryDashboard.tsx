@@ -1,38 +1,20 @@
-import { useState } from "react"
-import { Clapperboard, Eye, History, MessageCircleMore, Play } from "lucide-react"
-import { fetchSessionHistory, fetchSessionHistoryList } from "@/lib/api"
-import { skipToken, useQuery } from "@tanstack/react-query"
+import { useRef, useState } from "react"
+import { Clapperboard, Eye, History, MessageCircleMore } from "lucide-react"
+import { SessionReplayPlayer, type ReplayHandle } from "@/components/SessionReplayPlayer"
+import { useSessions, useSessionHistory } from "@/queries/history"
 import { formatNumber } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function SessionHistoryDashboard() {
-  const list = useQuery({
-    queryKey: ["sessions"],
-    queryFn: ({ signal }) => fetchSessionHistoryList(signal),
-  })
+  const list = useSessions()
   const sessions = list.data ?? []
   const [selection, setSelectedID] = useState<string | null>(null)
   const selectedID = selection ?? sessions[0]?.id ?? null
-  const history = useQuery({
-    queryKey: ["sessions", selectedID],
-    queryFn: selectedID ? ({ signal }) => fetchSessionHistory(selectedID, signal) : skipToken,
-  })
+  const history = useSessionHistory(selectedID)
   const detail = history.data
-  const [segmentSelection, setSegmentSelection] = useState<{ session: string | null; id: string }>()
-  const segmentID =
-    segmentSelection?.session === selectedID
-      ? segmentSelection.id
-      : detail?.segments.find((segment) => segment.playable)?.id
-  const setSegmentID = (id: string) => setSegmentSelection({ session: selectedID, id })
+  const player = useRef<ReplayHandle>(null)
   const error = (list.error ?? history.error)?.message
-  const playableSegments = detail?.segments.filter((segment) => segment.playable) ?? []
-  const selectedSegment = playableSegments.find((segment) => segment.id === segmentID) ?? null
-  const playNext = () => {
-    const index = playableSegments.findIndex((segment) => segment.id === segmentID)
-    if (index >= 0 && index + 1 < playableSegments.length)
-      setSegmentID(playableSegments[index + 1].id)
-  }
   return (
     <div className="space-y-5">
       <div>
@@ -68,8 +50,15 @@ export function SessionHistoryDashboard() {
                 </div>
                 <p className="mt-2 font-mono text-[10px] text-[var(--text-dim)]">{item.id}</p>
                 <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  片段 {item.readyTotal}/{item.segmentTotal} · ¥{formatNumber(item.costCny, 2)}
+                  片段 {item.readyTotal}/{item.segmentTotal} · 已结算 ¥
+                  {formatNumber(item.costCny, 2)}
                 </p>
+                {!!item.budgetLimitMicros && (
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    本场上限 ¥{(item.budgetLimitMicros / 1e6).toFixed(2)} · 待结算预占 ¥
+                    {((item.reservedMicros ?? 0) / 1e6).toFixed(4)}
+                  </p>
+                )}
               </button>
             ))}
             {sessions.length === 0 && (
@@ -78,43 +67,22 @@ export function SessionHistoryDashboard() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="inline-flex items-center gap-2">
                 <Clapperboard className="size-4 text-[var(--accent)]" />
-                片段回放
+                整场回放
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {selectedSegment ? (
-                <video
-                  key={selectedSegment.id}
-                  src={`/api/v1/ops/media/${selectedSegment.id}`}
-                  className="aspect-video w-full rounded-xl bg-black object-contain"
-                  controls
-                  autoPlay
-                  muted
-                  playsInline
-                  onEnded={playNext}
+              {detail && (
+                <SessionReplayPlayer
+                  key={detail.session.id}
+                  ref={player}
+                  segments={detail.segments}
                 />
-              ) : (
-                <div className="grid aspect-video place-items-center rounded-xl bg-black text-sm text-white/70">
-                  该直播没有可播放片段
-                </div>
               )}
-              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                {playableSegments.map((segment) => (
-                  <button
-                    key={segment.id}
-                    type="button"
-                    onClick={() => setSegmentID(segment.id)}
-                    className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold ${segmentID === segment.id ? "border-[var(--accent)] bg-[var(--accent)] text-slate-950" : "border-[var(--line)] bg-[var(--surface-raised)]"}`}
-                  >
-                    <Play className="size-3" />#{segment.sequence}
-                  </button>
-                ))}
-              </div>
             </CardContent>
           </Card>
 
@@ -161,7 +129,8 @@ export function SessionHistoryDashboard() {
                   <button
                     key={segment.id}
                     type="button"
-                    onClick={() => segment.playable && setSegmentID(segment.id)}
+                    disabled={!segment.playable}
+                    onClick={() => player.current?.seekSegment(segment.id)}
                     className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-3 text-left"
                   >
                     <div className="flex justify-between gap-3">

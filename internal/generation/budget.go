@@ -19,6 +19,7 @@ func Micros(cny float64) int64 { return int64(math.Ceil(cny * 1_000_000)) }
 // Budgeted reserves the full quote before the first external side effect.
 // Unknown outcomes retain their reservation until reconciliation.
 type Budgeted struct {
+	AllowUnsettledCost bool
 	Generator
 	Budget Budget
 }
@@ -49,6 +50,9 @@ func (b Budgeted) Submit(ctx context.Context, r Request) (Job, error) {
 }
 
 func (b Budgeted) ReconcileCost(ctx context.Context, attemptID string, cost *float64) error {
+	if cost == nil && b.AllowUnsettledCost {
+		return nil
+	}
 	if cost == nil {
 		return fmt.Errorf("missing actual cost for attempt %s", attemptID)
 	}

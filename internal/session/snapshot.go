@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"streaming-agent/internal/generation"
@@ -32,6 +34,9 @@ func (r *Runtime) SessionHistory(ctx context.Context, id string) (History, error
 }
 
 func (r *Runtime) recordGenerationError(err error) {
+	if errors.Is(err, context.Canceled) {
+		return
+	}
 	r.mu.Lock()
 	r.lastGenErr = err.Error()
 	r.mu.Unlock()
@@ -70,6 +75,7 @@ func (r *Runtime) publish() {
 		StreamGapTotal: r.streamGaps, GenerationLastError: r.lastGenErr,
 		SegmentDuration: r.config.SegmentDuration,
 	})
+	snapshot.Interaction = r.interactionStatusLocked()
 	r.mu.Unlock()
 	snapshot = r.hub.Publish(snapshot)
 	if r.metrics != nil {
@@ -91,4 +97,24 @@ func streamStatus(on bool, current *live.LiveSession) string {
 		return "failed"
 	}
 	return "stopped"
+}
+
+func (r *Runtime) interactionStatusLocked() string {
+	if r.session == nil || r.session.Status == live.SessionFailed || r.session.Status == live.SessionStopped {
+		return "直播未运行，互动不会进入规划"
+	}
+	if r.config.Audience == nil {
+		return ""
+	}
+	pending := r.config.Audience.Snapshot(time.Now().UTC())
+	if pending.Revision == r.audienceRevision && r.audienceError != "" {
+		return "互动未采用：" + r.audienceError
+	}
+	if pending.MessageCount > 0 && pending.Revision != r.audienceRevision {
+		return "已收到互动，等待采用到后续规划"
+	}
+	if r.audiencePosition > 0 {
+		return fmt.Sprintf("互动已采用：直播时间 %.0f 秒处，距当前播放位置约 %.0f 秒", r.audiencePosition.Seconds(), max(0, (r.audiencePosition-r.session.Timeline.Playhead).Seconds()))
+	}
+	return "等待互动"
 }

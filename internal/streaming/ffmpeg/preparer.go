@@ -93,7 +93,7 @@ func (p *Preparer) Prepare(ctx context.Context, request streaming.PrepareRequest
 		args = append(args, "-map", "1:a:0")
 	}
 	args = append(args,
-		"-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,trim=duration="+seconds+",setpts=PTS-STARTPTS",
+		"-vf", "scale=1280:720:force_original_aspect_ratio=decrease:flags=lanczos,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,trim=duration="+seconds+",setpts=PTS-STARTPTS",
 		"-af", "aresample=48000,apad=pad_dur="+seconds+",atrim=duration="+seconds+",asetpts=PTS-STARTPTS",
 		"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
 		"-r", "30", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",

@@ -14,7 +14,7 @@ type workGroup struct {
 }
 
 func newWorkGroup() *workGroup {
-	return &workGroup{active: make(map[string]bool), done: make(chan string, 3)}
+	return &workGroup{active: make(map[string]bool), done: make(chan string, 4)}
 }
 
 func (w *workGroup) start(ctx context.Context, name string, work func(context.Context)) {
